@@ -1,4 +1,4 @@
-package ds_driver
+package diskstore
 
 import (
 	"context"

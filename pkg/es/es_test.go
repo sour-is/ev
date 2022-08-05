@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/sour-is/ev/pkg/es"
-	ds_driver "github.com/sour-is/ev/pkg/es/driver/disk-store"
+	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
 	"github.com/sour-is/ev/pkg/es/event"
 )
 
@@ -16,9 +16,9 @@ func TestES(t *testing.T) {
 
 	event.Register(&ValueSet{})
 
-	ds_driver.Init(ctx)
+	memstore.Init(ctx)
 
-	es, err := es.Open(ctx, "file:data")
+	es, err := es.Open(ctx, "mem:")
 	if err != nil {
 		t.Fatal(err)
 	}

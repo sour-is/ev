@@ -17,7 +17,7 @@ import (
 
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
-	ds_driver "github.com/sour-is/ev/pkg/es/driver/disk-store"
+	"github.com/sour-is/ev/pkg/es/driver/disk-store"
 	"github.com/sour-is/ev/pkg/es/event"
 )
 
@@ -35,7 +35,7 @@ func main() {
 
 func run(ctx context.Context) error {
 	event.Register(&PostEvent{})
-	ds_driver.Init(ctx)
+	diskstore.Init(ctx)
 
 	es, err := es.Open(ctx, "file:data")
 	if err != nil {

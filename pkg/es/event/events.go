@@ -54,7 +54,7 @@ func (lis Events) SetStreamID(streamID string) {
 }
 func (lis Events) First() Event {
 	if len(lis) == 0 {
-		return nil
+		return nilEvent
 	}
 	return lis[0]
 }
@@ -63,6 +63,12 @@ func (lis Events) Rest() Events {
 		return nil
 	}
 	return lis[1:]
+}
+func (lis Events) Last() Event {
+	if len(lis) == 0 {
+		return nilEvent
+	}
+	return lis[len(lis)-1]
 }
 func (lis Events) MarshalText() ([]byte, error) {
 	b := &bytes.Buffer{}
@@ -118,6 +124,7 @@ func SetPosition(e Event, i uint64) {
 	meta.Position = i
 	e.SetEventMeta(meta)
 }
+
 type Meta struct {
 	EventID  ulid.ULID
 	StreamID string
@@ -127,3 +134,12 @@ type Meta struct {
 func (m Meta) Time() time.Time {
 	return ulid.Time(m.EventID.Time())
 }
+
+type _nilEvent struct{}
+
+func (_nilEvent) EventMeta() Meta {
+	return Meta{}
+}
+func (_nilEvent) SetEventMeta(eventMeta Meta) {}
+
+var nilEvent _nilEvent
