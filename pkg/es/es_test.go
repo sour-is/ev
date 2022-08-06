@@ -6,47 +6,42 @@ import (
 	"testing"
 	"time"
 
+	"github.com/matryer/is"
+
 	"github.com/sour-is/ev/pkg/es"
 	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
 	"github.com/sour-is/ev/pkg/es/event"
 )
 
 func TestES(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 
-	event.Register(&ValueSet{})
+	err := event.Register(ctx, &ValueSet{})
+	is.NoErr(err)
 
 	memstore.Init(ctx)
 
 	es, err := es.Open(ctx, "mem:")
-	if err != nil {
-		t.Fatal(err)
-	}
+	is.NoErr(err)
 
 	thing := &Thing{Name: "time"}
 	err = es.Load(ctx, thing)
-	if err != nil {
-		t.Fatal(err)
-	}
+	is.NoErr(err)
+
 	t.Log(thing.StreamVersion(), thing.Name, thing.Value)
 
 	err = thing.OnSetValue(time.Now().String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	is.NoErr(err)
 
 	i, err := es.Save(ctx, thing)
-	if err != nil {
-		t.Fatal(err)
-	}
+	is.NoErr(err)
 
 	t.Log(thing.StreamVersion(), thing.Name, thing.Value)
 	t.Log("Wrote: ", i)
 
 	events, err := es.Read(ctx, "thing-time", -1, -11)
-	if err != nil {
-		t.Fatal(err)
-	}
+	is.NoErr(err)
 
 	for i, e := range events {
 		t.Logf("event %d %d - %v\n", i, e.EventMeta().Position, e)

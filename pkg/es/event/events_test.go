@@ -2,6 +2,7 @@ package event_test
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/matryer/is"
@@ -30,8 +31,10 @@ func (e *DummyEvent) SetEventMeta(eventMeta event.Meta) {
 
 func TestEventEncode(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
-	event.Register(&DummyEvent{})
+	err := event.Register(ctx, &DummyEvent{})
+	is.NoErr(err)
 
 	var lis event.Events = event.NewEvents(
 		&DummyEvent{Value: "testA"},
@@ -50,7 +53,7 @@ func TestEventEncode(t *testing.T) {
 		is.Equal(string(sp[2]), "event_test.DummyEvent")
 	}
 
-	chk, err := event.DecodeEvents(blis...)
+	chk, err := event.DecodeEvents(ctx, blis...)
 	is.NoErr(err)
 
 	for i := range chk {

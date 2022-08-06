@@ -26,3 +26,16 @@ func (s *Locked[T]) Modify(ctx context.Context, fn func(*T) error) error {
 		return ctx.Err()
 	}
 }
+
+func (s *Locked[T]) Copy(ctx context.Context) (T, error) {
+	var t T
+
+	err := s.Modify(ctx, func(c *T) error {
+		if c != nil {
+			t = *c
+		}
+		return nil
+	})
+
+	return t, err
+}

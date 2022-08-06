@@ -22,15 +22,19 @@ func Abs[T signed](i T) T {
 	}
 	return -i
 }
-func Max[T ordered](i, j T) T {
-	if i > j {
-		return i
+func Max[T ordered](i T, candidates ...T) T {
+	for _, j := range candidates {
+		if i < j {
+			i = j
+		}
 	}
-	return j
+	return i
 }
-func Min[T ordered](i, j T) T {
-	if i < j {
-		return i
+func Min[T ordered](i T, candidates ...T) T {
+	for _, j := range candidates {
+		if i > j {
+			i = j
+		}
 	}
-	return j
+	return i
 }

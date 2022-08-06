@@ -15,11 +15,11 @@ type config struct {
 }
 
 var (
-	Config = locker.New(&config{drivers: make(map[string]driver.Driver)})
+	drivers = locker.New(&config{drivers: make(map[string]driver.Driver)})
 )
 
-func Register(ctx context.Context, name string, d driver.Driver) {
-	Config.Modify(ctx, func(c *config) error {
+func Register(ctx context.Context, name string, d driver.Driver) error {
+	return drivers.Modify(ctx, func(c *config) error {
 		if _, set := c.drivers[name]; set {
 			return fmt.Errorf("driver %s already set", name)
 		}
@@ -35,7 +35,7 @@ func Open(ctx context.Context, dsn string) (driver.EventStore, error) {
 	}
 
 	var d driver.Driver
-	Config.Modify(ctx,func(c *config) error {
+	drivers.Modify(ctx,func(c *config) error {
 		var ok bool
 		d, ok = c.drivers[name]
 		if !ok {

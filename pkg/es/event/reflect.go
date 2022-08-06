@@ -2,6 +2,7 @@ package event
 
 import (
 	"bytes"
+	"context"
 	"encoding"
 	"encoding/json"
 	"fmt"
@@ -9,11 +10,16 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
-	"sync"
+
+	"github.com/sour-is/ev/pkg/locker"
 )
 
+type config struct {
+	eventTypes map[string]reflect.Type
+}
+
 var (
-	eventTypes sync.Map
+	eventTypes = locker.New(&config{eventTypes: make(map[string]reflect.Type)})
 )
 
 type UnknownEvent struct {
@@ -63,35 +69,56 @@ func (u *UnknownEvent) MarshalJSON() ([]byte, error) {
 }
 
 // Register a type container for Unmarshalling values into. The type must implement Event and not be a nil value.
-func Register(lis ...Event) {
+func Register(ctx context.Context, lis ...Event) error {
 	for _, e := range lis {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if e == nil {
-			panic(fmt.Sprintf("can't register event.Event of type=%T with value=%v", e, e))
+			return fmt.Errorf("can't register event.Event of type=%T with value=%v", e, e)
 		}
 
 		value := reflect.ValueOf(e)
 
 		if value.IsNil() {
-			panic(fmt.Sprintf("can't register event.Event of type=%T with value=%v", e, e))
+			return fmt.Errorf("can't register event.Event of type=%T with value=%v", e, e)
 		}
 
 		value = reflect.Indirect(value)
+
+		name := TypeOf(e)
 		typ := value.Type()
 
-		eventTypes.LoadOrStore(TypeOf(e), typ)
-	}
-}
-func GetContainer(s string) Event {
-	if typ, ok := eventTypes.Load(s); ok {
-		if typ, ok := typ.(reflect.Type); ok {
-			newType := reflect.New(typ)
-			newInterface := newType.Interface()
-			if typ, ok := newInterface.(Event); ok {
-				return typ
-			}
+		if err := eventTypes.Modify(ctx, func(c *config) error {
+			c.eventTypes[name] = typ
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
-	return &UnknownEvent{eventType: s}
+	return nil
+}
+func GetContainer(ctx context.Context, s string) Event {
+	var e Event
+
+	eventTypes.Modify(ctx, func(c *config) error {
+			typ, ok := c.eventTypes[s]
+			if !ok {
+				return fmt.Errorf("not defined")
+			}
+			newType := reflect.New(typ)
+			newInterface := newType.Interface()
+			if iface, ok := newInterface.(Event); ok {
+				e = iface
+				return nil
+			}
+			return fmt.Errorf("failed")
+	})
+	if e == nil {
+		e = &UnknownEvent{eventType: s}
+	}
+
+	return e
 }
 
 func MarshalText(e Event) (txt []byte, err error) {
@@ -123,7 +150,7 @@ func MarshalText(e Event) (txt []byte, err error) {
 	return b.Bytes(), err
 }
 
-func UnmarshalText(txt []byte, pos uint64) (e Event, err error) {
+func UnmarshalText(ctx context.Context, txt []byte, pos uint64) (e Event, err error) {
 	sp := bytes.SplitN(txt, []byte{'\t'}, 4)
 	if len(sp) != 4 {
 		return nil, fmt.Errorf("invalid format. expected=4, got=%d", len(sp))
@@ -138,7 +165,7 @@ func UnmarshalText(txt []byte, pos uint64) (e Event, err error) {
 	m.Position = pos
 
 	eventType := string(sp[2])
-	e = GetContainer(eventType)
+	e = GetContainer(ctx, eventType)
 
 	if enc, ok := e.(encoding.TextUnmarshaler); ok {
 		if err = enc.UnmarshalText(sp[3]); err != nil {
@@ -163,12 +190,12 @@ func writeMarshaler(out io.Writer, in encoding.TextMarshaler) (int, error) {
 }
 
 // DecodeEvents unmarshals the byte list into Events.
-func DecodeEvents(lis ...[]byte) (Events, error) {
+func DecodeEvents(ctx context.Context, lis ...[]byte) (Events, error) {
 	elis := make([]Event, len(lis))
 
 	var err error
 	for i, txt := range lis {
-		elis[i], err = UnmarshalText(txt, uint64(i))
+		elis[i], err = UnmarshalText(ctx, txt, uint64(i))
 		if err != nil {
 			return nil, err
 		}

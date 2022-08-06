@@ -21,8 +21,9 @@ type diskStore struct {
 
 var _ driver.Driver = (*diskStore)(nil)
 
-func Init(ctx context.Context) {
+func Init(ctx context.Context) error {
 	es.Register(ctx, "file", &diskStore{})
+	return nil
 }
 
 func (diskStore) Open(dsn string) (driver.EventStore, error) {
@@ -143,7 +144,7 @@ func (es *diskStore) Load(ctx context.Context, agg event.Aggregate) error {
 		if err != nil {
 			return err
 		}
-		events[i], err = event.UnmarshalText(b, first+i)
+		events[i], err = event.UnmarshalText(ctx, b, first+i)
 		if err != nil {
 			return err
 		}
@@ -193,7 +194,7 @@ func (es *diskStore) Read(ctx context.Context, streamID string, pos, count int64
 		if err != nil {
 			return events, err
 		}
-		events[i], err = event.UnmarshalText(b, start)
+		events[i], err = event.UnmarshalText(ctx, b, start)
 		if err != nil {
 			return events, err
 		}
