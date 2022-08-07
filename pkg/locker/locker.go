@@ -6,6 +6,7 @@ type Locked[T any] struct {
 	state chan *T
 }
 
+// New creates a new locker for the given value.
 func New[T any](initial *T) *Locked[T] {
 	s := &Locked[T]{}
 	s.state = make(chan *T, 1)
@@ -13,6 +14,7 @@ func New[T any](initial *T) *Locked[T] {
 	return s
 }
 
+// Modify will call the function with the locked value
 func (s *Locked[T]) Modify(ctx context.Context, fn func(*T) error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -27,6 +29,7 @@ func (s *Locked[T]) Modify(ctx context.Context, fn func(*T) error) error {
 	}
 }
 
+// Copy will return a shallow copy of the locked object.
 func (s *Locked[T]) Copy(ctx context.Context) (T, error) {
 	var t T
 

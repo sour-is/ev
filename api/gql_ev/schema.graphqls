@@ -1,0 +1,46 @@
+extend type Query {
+    events(streamID: String! paging: PageInput): Connection!
+}
+
+type Connection {
+    paging: PageInfo!
+    edges: [Edge!]!
+}
+input PageInput {
+    idx: Int = 0
+    count: Int = 30
+}
+type PageInfo {
+    next: Boolean!
+    prev: Boolean!
+
+    begin: Int!
+    end:   Int!
+}
+interface Edge {
+    id: ID!
+}
+
+type Event implements Edge {
+    id: ID!
+
+    payload: String!
+    tags: [String!]!
+
+    meta: Meta!
+}
+
+type Meta {
+    id: String!
+
+    streamID: String!
+    created: Time!
+    position: Int!
+}
+
+scalar Time
+
+directive @goField(
+	forceResolver: Boolean
+	name: String
+) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION

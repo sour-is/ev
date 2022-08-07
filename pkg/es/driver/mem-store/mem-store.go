@@ -140,3 +140,19 @@ func (m *memstore) Save(ctx context.Context, agg event.Aggregate) (uint64, error
 
 	return uint64(len(events)), nil
 }
+
+func (m *memstore) FirstIndex(ctx context.Context, streamID string) (uint64, error) {
+	stream, err := m.state.Copy(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return stream.streams[streamID].First().EventMeta().Position, nil
+}
+func (m *memstore) LastIndex(ctx context.Context, streamID string) (uint64, error) {
+	stream, err := m.state.Copy(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return stream.streams[streamID].Last().EventMeta().Position, nil
+
+}

@@ -15,4 +15,6 @@ type EventStore interface {
 	Load(ctx context.Context, agg event.Aggregate) error
 	Read(ctx context.Context, streamID string, pos, count int64) (event.Events, error)
 	Append(ctx context.Context, streamID string, events event.Events) (uint64, error)
+	FirstIndex(ctx context.Context, streamID string) (uint64, error)
+	LastIndex(ctx context.Context, streamID string) (uint64, error)
 }

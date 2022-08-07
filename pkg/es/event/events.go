@@ -131,9 +131,10 @@ type Meta struct {
 	Position uint64
 }
 
-func (m Meta) Time() time.Time {
+func (m Meta) Created() time.Time {
 	return ulid.Time(m.EventID.Time())
 }
+func (m Meta) ID() string { return m.EventID.String() }
 
 type _nilEvent struct{}
 

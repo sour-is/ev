@@ -53,11 +53,9 @@ func (es *diskStore) Save(ctx context.Context, agg event.Aggregate) (uint64, err
 	}
 
 	var last uint64
-
-	if last, err = l.w.LastIndex(); err != nil {
+	if last, err = l.LastIndex(); err != nil {
 		return 0, err
 	}
-
 	if agg.StreamVersion() != last {
 		return 0, fmt.Errorf("current version wrong %d != %d", agg.StreamVersion(), last)
 	}
@@ -75,7 +73,7 @@ func (es *diskStore) Save(ctx context.Context, agg event.Aggregate) (uint64, err
 		batch.Write(e.EventMeta().Position, b)
 	}
 
-	err = l.w.WriteBatch(batch)
+	err = l.WriteBatch(batch)
 	if err != nil {
 		return 0, err
 	}
@@ -92,8 +90,7 @@ func (es *diskStore) Append(ctx context.Context, streamID string, events event.E
 	}
 
 	var last uint64
-
-	if last, err = l.w.LastIndex(); err != nil {
+	if last, err = l.LastIndex(); err != nil {
 		return 0, err
 	}
 
@@ -111,7 +108,7 @@ func (es *diskStore) Append(ctx context.Context, streamID string, events event.E
 		batch.Write(pos, b)
 	}
 
-	err = l.w.WriteBatch(batch)
+	err = l.WriteBatch(batch)
 	if err != nil {
 		return 0, err
 	}
@@ -125,22 +122,20 @@ func (es *diskStore) Load(ctx context.Context, agg event.Aggregate) error {
 
 	var i, first, last uint64
 
-	if first, err = l.w.FirstIndex(); err != nil {
+	if first, err = l.FirstIndex(); err != nil {
 		return err
 	}
-	if last, err = l.w.LastIndex(); err != nil {
+	if last, err = l.LastIndex(); err != nil {
 		return err
 	}
-
 	if first == 0 || last == 0 {
 		return nil
 	}
 
 	var b []byte
 	events := make([]event.Event, last-i)
-
 	for i = 0; first+i <= last; i++ {
-		b, err = l.w.Read(first + i)
+		b, err = l.Read(first + i)
 		if err != nil {
 			return err
 		}
@@ -149,7 +144,6 @@ func (es *diskStore) Load(ctx context.Context, agg event.Aggregate) error {
 			return err
 		}
 	}
-
 	event.Append(agg, events...)
 
 	return nil
@@ -161,14 +155,12 @@ func (es *diskStore) Read(ctx context.Context, streamID string, pos, count int64
 	}
 
 	var first, last, start uint64
-
-	if first, err = l.w.FirstIndex(); err != nil {
+	if first, err = l.FirstIndex(); err != nil {
 		return nil, err
 	}
-	if last, err = l.w.LastIndex(); err != nil {
+	if last, err = l.LastIndex(); err != nil {
 		return nil, err
 	}
-
 	if first == 0 || last == 0 {
 		return nil, nil
 	}
@@ -190,7 +182,7 @@ func (es *diskStore) Read(ctx context.Context, streamID string, pos, count int64
 	for i := range events {
 		var b []byte
 
-		b, err = l.w.Read(start)
+		b, err = l.Read(start)
 		if err != nil {
 			return events, err
 		}
@@ -209,25 +201,25 @@ func (es *diskStore) Read(ctx context.Context, streamID string, pos, count int64
 			break
 		}
 	}
-
 	event.SetStreamID(streamID, events...)
 
 	return events, nil
 }
-
-func (es *diskStore) readLog(name string) (*eventLog, error) {
-	return newEventLog(name, filepath.Join(es.path, name))
+func (es *diskStore) FirstIndex(ctx context.Context, streamID string) (uint64, error) {
+	l, err := es.readLog(streamID)
+	if err != nil {
+		return 0, err
+	}
+	return l.FirstIndex()
+}
+func (es *diskStore) LastIndex(ctx context.Context, streamID string) (uint64, error) {
+	l, err := es.readLog(streamID)
+	if err != nil {
+		return 0, err
+	}
+	return l.LastIndex()
 }
 
-type eventLog struct {
-	name string
-	path string
-	w    *wal.Log
-}
-
-func newEventLog(name, path string) (*eventLog, error) {
-	var err error
-	el := &eventLog{name: name, path: path}
-	el.w, err = wal.Open(path, wal.DefaultOptions)
-	return el, err
+func (es *diskStore) readLog(name string) (*wal.Log, error) {
+	return wal.Open(filepath.Join(es.path, name), wal.DefaultOptions)
 }
