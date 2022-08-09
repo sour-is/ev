@@ -1,24 +1,26 @@
-package service
+package msgbus
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/sour-is/ev/pkg/es/driver"
+	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 )
 
 type service struct {
-	es driver.EventStore
+	es *es.EventStore
 }
 
-func New(ctx context.Context, es driver.EventStore) (*service, error) {
+func New(ctx context.Context, es *es.EventStore) (*service, error) {
 	if err := event.Register(ctx, &PostEvent{}); err != nil {
 		return nil, err
 	}
@@ -32,6 +34,11 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		w.WriteHeader(http.StatusNotFound)
 		return
+	}
+
+	var first event.Event = event.NilEvent
+	if lis, err := s.es.Read(ctx, "post-"+name, 0, 1); err == nil && len(lis) > 0 {
+		first = lis[0]
 	}
 
 	switch r.Method {
@@ -51,6 +58,18 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Print(err)
 			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			w.Header().Add("Content-Type", "application/json")
+
+			if err = encodeJSON(w, first, events); err != nil {
+				log.Print(err)
+
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 			return
 		}
 
@@ -85,10 +104,29 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if first == event.NilEvent {
+			first = events.First()
+		}
+
 		m := events.First().EventMeta()
-		w.WriteHeader(http.StatusAccepted)
 		log.Print("POST topic=", name, " tags=", tags, " idx=", m.Position, " id=", m.EventID)
+
+		w.WriteHeader(http.StatusAccepted)
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			w.Header().Add("Content-Type", "application/json")
+			if err = encodeJSON(w, first, events); err != nil {
+				log.Print(err)
+
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			return
+		}
+
+		w.Header().Add("Content-Type", "text/plain")
 		fmt.Fprintf(w, "OK %d %s", m.Position, m.EventID)
+		return
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -136,4 +174,39 @@ func fields(s string) []string {
 		return nil
 	}
 	return strings.Split(s, "/")
+}
+
+func encodeJSON(w io.Writer, first event.Event, events event.Events) error {
+	out := make([]struct {
+		ID      uint64   `json:"id"`
+		Payload []byte   `json:"payload"`
+		Created string   `json:"created"`
+		Tags    []string `json:"tags"`
+		Topic   struct {
+			Name    string `json:"name"`
+			TTL     uint64 `json:"ttl"`
+			Seq     uint64 `json:"seq"`
+			Created string `json:"created"`
+		} `json:"topic"`
+	}, len(events))
+
+	for i := range events {
+		e, ok := events[i].(*PostEvent)
+		if !ok {
+			continue
+		}
+		out[i].ID = e.EventMeta().Position
+		out[i].Created = e.EventMeta().Created().Format(time.RFC3339Nano)
+		out[i].Payload = e.Payload
+		out[i].Tags = e.Tags
+		out[i].Topic.Name = e.EventMeta().StreamID
+		out[i].Topic.Created = first.EventMeta().Created().Format(time.RFC3339Nano)
+		out[i].Topic.Seq = e.EventMeta().Position
+	}
+
+	if len(out) == 1 {
+		return json.NewEncoder(w).Encode(out[0])
+	}
+
+	return json.NewEncoder(w).Encode(out)
 }

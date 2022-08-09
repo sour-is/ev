@@ -17,7 +17,8 @@ import (
 	"github.com/sour-is/ev/pkg/es"
 	diskstore "github.com/sour-is/ev/pkg/es/driver/disk-store"
 	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
-	"github.com/sour-is/ev/pkg/es/service"
+	"github.com/sour-is/ev/pkg/es/driver/streamer"
+	"github.com/sour-is/ev/pkg/msgbus"
 	"github.com/sour-is/ev/pkg/playground"
 )
 
@@ -36,12 +37,12 @@ func run(ctx context.Context) error {
 	diskstore.Init(ctx)
 	memstore.Init(ctx)
 
-	es, err := es.Open(ctx, env("EV_DATA", "file:data"))
+	es, err := es.Open(ctx, env("EV_DATA", "file:data"), streamer.New(ctx))
 	if err != nil {
 		return err
 	}
 
-	svc, err := service.New(ctx, es)
+	svc, err := msgbus.New(ctx, es)
 	if err != nil {
 		return err
 	}

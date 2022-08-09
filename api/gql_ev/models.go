@@ -1,6 +1,11 @@
 package gql_ev
 
-import "github.com/sour-is/ev/pkg/es/event"
+import (
+	"context"
+	"encoding/json"
+
+	"github.com/sour-is/ev/pkg/es/event"
+)
 
 type Edge interface {
 	IsEdge()
@@ -11,14 +16,19 @@ type Connection struct {
 	Edges  []Edge    `json:"edges"`
 }
 
-type Event struct {
+type PostEvent struct {
 	ID      string      `json:"id"`
 	Payload string      `json:"payload"`
 	Tags    []string    `json:"tags"`
 	Meta    *event.Meta `json:"meta"`
 }
 
-func (Event) IsEdge() {}
+func (PostEvent) IsEdge() {}
+
+func (e *PostEvent) PayloadJSON(ctx context.Context) (m map[string]interface{}, err error) {
+	err = json.Unmarshal([]byte(e.Payload), &m)
+	return
+}
 
 type PageInfo struct {
 	Next  bool   `json:"next"`

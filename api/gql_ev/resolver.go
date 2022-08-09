@@ -2,9 +2,12 @@ package gql_ev
 
 import (
 	"context"
+	"fmt"
+	"log"
+	"time"
 
-	"github.com/sour-is/ev/pkg/es/driver"
-	"github.com/sour-is/ev/pkg/es/service"
+	"github.com/sour-is/ev/pkg/es"
+	"github.com/sour-is/ev/pkg/msgbus"
 )
 
 // This file will not be regenerated automatically.
@@ -12,15 +15,15 @@ import (
 // It serves as dependency injection for your app, add any dependencies you require here.
 
 type Resolver struct {
-	es driver.EventStore
+	es *es.EventStore
 }
 
-func New(es driver.EventStore) *Resolver {
+func New(es *es.EventStore) *Resolver {
 	return &Resolver{es}
 }
 
-// Events is the resolver for the events field.
-func (r *Resolver) Events(ctx context.Context, streamID string, paging *PageInput) (*Connection, error) {
+// Posts is the resolver for the events field.
+func (r *Resolver) Posts(ctx context.Context, streamID string, paging *PageInput) (*Connection, error) {
 	lis, err := r.es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
 	if err != nil {
 		return nil, err
@@ -31,12 +34,12 @@ func (r *Resolver) Events(ctx context.Context, streamID string, paging *PageInpu
 		e := lis[i]
 		m := e.EventMeta()
 
-		post, ok := e.(*service.PostEvent)
+		post, ok := e.(*msgbus.PostEvent)
 		if !ok {
 			continue
 		}
 
-		edges = append(edges, Event{
+		edges = append(edges, PostEvent{
 			ID:      lis[i].EventMeta().EventID.String(),
 			Payload: string(post.Payload),
 			Tags:    post.Tags,
@@ -61,4 +64,51 @@ func (r *Resolver) Events(ctx context.Context, streamID string, paging *PageInpu
 		},
 		Edges: edges,
 	}, nil
+}
+
+func (r *Resolver) PostAdded(ctx context.Context, streamID string) (<-chan *PostEvent, error) {
+	es := r.es.EventStream()
+	if es == nil {
+		return nil, fmt.Errorf("EventStore does not implement streaming")
+	}
+
+	sub, err := es.Subscribe(ctx, streamID)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan *PostEvent)
+
+	go func() {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			log.Print(sub.Close(ctx))
+		}()
+
+		for sub.Recv(ctx) {
+			events, err := sub.Events(ctx)
+			if err != nil {
+				break
+			}
+			for _, e := range events {
+				m := e.EventMeta()
+				if p, ok := e.(*msgbus.PostEvent); ok {
+					select {
+					case ch <- &PostEvent{
+						ID:      m.EventID.String(),
+						Payload: string(p.Payload),
+						Tags:    p.Tags,
+						Meta:    &m,
+					}:
+						continue
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return ch, nil
 }

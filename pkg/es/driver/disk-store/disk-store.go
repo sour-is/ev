@@ -12,6 +12,7 @@ import (
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/locker"
 	"github.com/sour-is/ev/pkg/math"
 )
 
@@ -19,14 +20,17 @@ type diskStore struct {
 	path string
 }
 
-var _ driver.Driver = (*diskStore)(nil)
+const AppendOnly = es.AppendOnly
+const AllEvents = es.AllEvents
 
 func Init(ctx context.Context) error {
 	es.Register(ctx, "file", &diskStore{})
 	return nil
 }
 
-func (diskStore) Open(dsn string) (driver.EventStore, error) {
+var _ driver.Driver = (*diskStore)(nil)
+
+func (diskStore) Open(_ context.Context, dsn string) (driver.Driver, error) {
 	scheme, path, ok := strings.Cut(dsn, ":")
 	if !ok {
 		return nil, fmt.Errorf("expected scheme")
@@ -45,181 +49,151 @@ func (diskStore) Open(dsn string) (driver.EventStore, error) {
 
 	return &diskStore{path: path}, nil
 }
-
-func (es *diskStore) Save(ctx context.Context, agg event.Aggregate) (uint64, error) {
-	l, err := es.readLog(agg.StreamID())
-	if err != nil {
-		return 0, err
-	}
-
-	var last uint64
-	if last, err = l.LastIndex(); err != nil {
-		return 0, err
-	}
-	if agg.StreamVersion() != last {
-		return 0, fmt.Errorf("current version wrong %d != %d", agg.StreamVersion(), last)
-	}
-
-	events := agg.Events(true)
-
-	var b []byte
-	batch := &wal.Batch{}
-	for _, e := range events {
-		b, err = event.MarshalText(e)
-		if err != nil {
-			return 0, err
-		}
-
-		batch.Write(e.EventMeta().Position, b)
-	}
-
-	err = l.WriteBatch(batch)
-	if err != nil {
-		return 0, err
-	}
-	agg.Commit()
-
-	return uint64(len(events)), nil
+func (ds *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
+	el := &eventLog{streamID: streamID}
+	l, err := wal.Open(filepath.Join(ds.path, streamID), wal.DefaultOptions)
+	el.events = locker.New(l)
+	return el, err
 }
-func (es *diskStore) Append(ctx context.Context, streamID string, events event.Events) (uint64, error) {
-	event.SetStreamID(streamID, events...)
 
-	l, err := es.readLog(streamID)
-	if err != nil {
-		return 0, err
-	}
-
-	var last uint64
-	if last, err = l.LastIndex(); err != nil {
-		return 0, err
-	}
-
-	var b []byte
-
-	batch := &wal.Batch{}
-	for i, e := range events {
-		b, err = event.MarshalText(e)
-		if err != nil {
-			return 0, err
-		}
-		pos := last + uint64(i) + 1
-		event.SetPosition(e, pos)
-
-		batch.Write(pos, b)
-	}
-
-	err = l.WriteBatch(batch)
-	if err != nil {
-		return 0, err
-	}
-	return uint64(len(events)), nil
+type eventLog struct {
+	streamID string
+	events   *locker.Locked[wal.Log]
 }
-func (es *diskStore) Load(ctx context.Context, agg event.Aggregate) error {
-	l, err := es.readLog(agg.StreamID())
-	if err != nil {
-		return err
-	}
 
-	var i, first, last uint64
+var _ driver.EventLog = (*eventLog)(nil)
 
-	if first, err = l.FirstIndex(); err != nil {
-		return err
-	}
-	if last, err = l.LastIndex(); err != nil {
-		return err
-	}
-	if first == 0 || last == 0 {
-		return nil
-	}
+func (es *eventLog) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
+	event.SetStreamID(es.streamID, events...)
 
-	var b []byte
-	events := make([]event.Event, last-i)
-	for i = 0; first+i <= last; i++ {
-		b, err = l.Read(first + i)
+	var count uint64
+	err := es.events.Modify(ctx, func(l *wal.Log) error {
+		last, err := l.LastIndex()
 		if err != nil {
 			return err
 		}
-		events[i], err = event.UnmarshalText(ctx, b, first+i)
-		if err != nil {
-			return err
+
+		if version != AppendOnly && version != last {
+			return fmt.Errorf("current version wrong %d != %d", version, last)
 		}
-	}
-	event.Append(agg, events...)
 
-	return nil
-}
-func (es *diskStore) Read(ctx context.Context, streamID string, pos, count int64) (event.Events, error) {
-	l, err := es.readLog(streamID)
-	if err != nil {
-		return nil, err
-	}
-
-	var first, last, start uint64
-	if first, err = l.FirstIndex(); err != nil {
-		return nil, err
-	}
-	if last, err = l.LastIndex(); err != nil {
-		return nil, err
-	}
-	if first == 0 || last == 0 {
-		return nil, nil
-	}
-
-	switch {
-	case pos >= 0:
-		start = first + uint64(pos)
-		if pos == 0 && count < 0 {
-			count = -count // if pos=0 assume forward count.
-		}
-	case pos < 0:
-		start = uint64(int64(last) + pos + 1)
-		if pos == -1 && count > 0 {
-			count = -count // if pos=-1 assume backward count.
-		}
-	}
-
-	events := make([]event.Event, math.Abs(count))
-	for i := range events {
 		var b []byte
 
-		b, err = l.Read(start)
+		batch := &wal.Batch{}
+		for i, e := range events {
+			b, err = event.MarshalText(e)
+			if err != nil {
+				return err
+			}
+			pos := last + uint64(i) + 1
+			event.SetPosition(e, pos)
+
+			batch.Write(pos, b)
+		}
+
+		count = uint64(len(events))
+		return l.WriteBatch(batch)
+	})
+
+	return count, err
+}
+func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, error) {
+	var events event.Events
+
+	err := es.events.Modify(ctx, func(stream *wal.Log) error {
+		first, err := stream.FirstIndex()
 		if err != nil {
-			return events, err
+			return err
 		}
-		events[i], err = event.UnmarshalText(ctx, b, start)
+		last, err := stream.LastIndex()
 		if err != nil {
-			return events, err
+			return err
+		}
+		// ---
+		if first == 0 || last == 0 {
+			return nil
 		}
 
-		if count > 0 {
-			start += 1
-		} else {
-			start -= 1
+		if count == AllEvents {
+			count = int64(first - last)
 		}
-		if start < first || start > last {
-			events = events[:i+1]
-			break
-		}
-	}
-	event.SetStreamID(streamID, events...)
 
-	return events, nil
-}
-func (es *diskStore) FirstIndex(ctx context.Context, streamID string) (uint64, error) {
-	l, err := es.readLog(streamID)
+		var start uint64
+
+		switch {
+		case pos >= 0 && count > 0:
+			start = first + uint64(pos)
+		case pos < 0 && count > 0:
+			start = uint64(int64(last) + pos + 1)
+
+		case pos >= 0 && count < 0:
+			start = first + uint64(pos)
+			if pos > 1 {
+				start -= 2 // if pos is positive and count negative start before
+			}
+			if pos <= 1 {
+				return nil // if pos is one or zero and negative count nothing to return
+			}
+		case pos < 0 && count < 0:
+			start = uint64(int64(last) + pos)
+		}
+		if start >= last {
+			return nil // if start is after last and positive count nothing to return
+		}
+
+		events = make([]event.Event, math.Abs(count))
+		for i := range events {
+			// ---
+			var b []byte
+			b, err = stream.Read(start)
+			if err != nil {
+				return err
+			}
+			events[i], err = event.UnmarshalText(ctx, b, start)
+			if err != nil {
+				return err
+			}
+			// ---
+
+			if count > 0 {
+				start += 1
+			} else {
+				start -= 1
+			}
+			if start < first || start > last {
+				events = events[:i+1]
+				break
+			}
+		}
+		return nil
+	})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return l.FirstIndex()
-}
-func (es *diskStore) LastIndex(ctx context.Context, streamID string) (uint64, error) {
-	l, err := es.readLog(streamID)
-	if err != nil {
-		return 0, err
-	}
-	return l.LastIndex()
-}
 
-func (es *diskStore) readLog(name string) (*wal.Log, error) {
-	return wal.Open(filepath.Join(es.path, name), wal.DefaultOptions)
+	event.SetStreamID(es.streamID, events...)
+
+	return events, err
+}
+func (es *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
+	var idx uint64
+	var err error
+
+	err = es.events.Modify(ctx, func(events *wal.Log) error {
+		idx, err = events.FirstIndex()
+		return err
+	})
+
+	return idx, err
+}
+func (es *eventLog) LastIndex(ctx context.Context) (uint64, error) {
+	var idx uint64
+	var err error
+
+	err = es.events.Modify(ctx, func(events *wal.Log) error {
+		idx, err = events.LastIndex()
+		return err
+	})
+
+	return idx, err
 }

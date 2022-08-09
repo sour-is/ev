@@ -1,0 +1,15 @@
+extend type Query {
+    posts(streamID: String! paging: PageInput): Connection!
+}
+extend type Subscription {
+    postAdded(streamID: String!): PostEvent
+}
+type PostEvent implements Edge {
+    id: ID!
+
+    payload: String!
+    payloadJSON: Map!
+    tags: [String!]!
+
+    meta: Meta!
+}

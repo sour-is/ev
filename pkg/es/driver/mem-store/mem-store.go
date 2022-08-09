@@ -12,84 +12,113 @@ import (
 )
 
 type state struct {
-	streams map[string]event.Events
+	streams map[string]*locker.Locked[event.Events]
 }
-
+type eventLog struct {
+	streamID string
+	events   *locker.Locked[event.Events]
+}
 type memstore struct {
 	state *locker.Locked[state]
 }
 
-var _ driver.Driver = (*memstore)(nil)
+const AppendOnly = es.AppendOnly
+const AllEvents = es.AllEvents
 
 func Init(ctx context.Context) {
 	es.Register(ctx, "mem", &memstore{})
 }
 
-func (memstore) Open(name string) (driver.EventStore, error) {
-	s := &state{streams: make(map[string]event.Events)}
+var _ driver.Driver = (*memstore)(nil)
+
+func (memstore) Open(_ context.Context, name string) (driver.Driver, error) {
+	s := &state{streams: make(map[string]*locker.Locked[event.Events])}
 	return &memstore{locker.New(s)}, nil
 }
+func (m *memstore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
+	el := &eventLog{streamID: streamID}
+
+	err := m.state.Modify(ctx, func(state *state) error {
+		l, ok := state.streams[streamID]
+		if !ok {
+			l = locker.New(&event.Events{})
+			state.streams[streamID] = l
+		}
+		el.events = l
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return el, err
+}
+
+var _ driver.EventLog = (*eventLog)(nil)
 
 // Append implements driver.EventStore
-func (m *memstore) Append(ctx context.Context, streamID string, events event.Events) (uint64, error) {
-	event.SetStreamID(streamID, events...)
+func (m *eventLog) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
+	event.SetStreamID(m.streamID, events...)
 
-	return uint64(len(events)), m.state.Modify(ctx, func(state *state) error {
-		stream := state.streams[streamID]
-		last := uint64(len(stream))
+	return uint64(len(events)), m.events.Modify(ctx, func(stream *event.Events) error {
+		last := uint64(len(*stream))
+		if version != AppendOnly && version != last {
+			return fmt.Errorf("current version wrong %d != %d", version, last)
+		}
+
 		for i := range events {
 			pos := last + uint64(i) + 1
 			event.SetPosition(events[i], pos)
-			stream = append(stream, events[i])
-			state.streams[streamID] = stream
+			*stream = append(*stream, events[i])
 		}
 
-		return nil
-	})
-}
-
-// Load implements driver.EventStore
-func (m *memstore) Load(ctx context.Context, agg event.Aggregate) error {
-	return m.state.Modify(ctx, func(state *state) error {
-		events := state.streams[agg.StreamID()]
-		event.SetStreamID(agg.StreamID(), events...)
-		agg.ApplyEvent(events...)
 		return nil
 	})
 }
 
 // Read implements driver.EventStore
-func (m *memstore) Read(ctx context.Context, streamID string, pos int64, count int64) (event.Events, error) {
-	events := make([]event.Event, math.Abs(count))
+func (es *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Events, error) {
+	var events event.Events
 
-	err := m.state.Modify(ctx, func(state *state) error {
-		stream := state.streams[streamID]
-
-		var first, last, start uint64
-		first = stream.First().EventMeta().Position
-		last = stream.Last().EventMeta().Position
-
+	err := es.events.Modify(ctx, func(stream *event.Events) error {
+		first := stream.First().EventMeta().Position
+		last := stream.Last().EventMeta().Position
+		// ---
 		if first == 0 || last == 0 {
-			events = events[:0]
-
 			return nil
 		}
 
-		switch {
-		case pos >= 0:
-			start = first + uint64(pos)
-			if pos == 0 && count < 0 {
-				count = -count // if pos=0 assume forward count.
-			}
-		case pos < 0:
-			start = uint64(int64(last) + pos + 1)
-			if pos == -1 && count > 0 {
-				count = -count // if pos=-1 assume backward count.
-			}
+		if count == AllEvents {
+			count = int64(first - last)
 		}
 
+		var start uint64
+
+		switch {
+		case pos >= 0 && count > 0:
+			start = first + uint64(pos)
+		case pos < 0 && count > 0:
+			start = uint64(int64(last) + pos + 1)
+
+		case pos >= 0 && count < 0:
+			start = first + uint64(pos)
+			if pos > 1 {
+				start -= 2 // if pos is positive and count negative start before
+			}
+			if pos <= 1 {
+				return nil // if pos is one or zero and negative count nothing to return
+			}
+		case pos < 0 && count < 0:
+			start = uint64(int64(last) + pos)
+		}
+		if start >= last {
+			return nil // if start is after last and positive count nothing to return
+		}
+
+		events = make([]event.Event, math.Abs(count))
 		for i := range events {
-			events[i] = stream[start-1]
+			// ---
+			events[i] = (*stream)[start-1]
+			// ---
 
 			if count > 0 {
 				start += 1
@@ -108,51 +137,19 @@ func (m *memstore) Read(ctx context.Context, streamID string, pos int64, count i
 		return nil, err
 	}
 
+	event.SetStreamID(es.streamID, events...)
+
 	return events, nil
 }
 
-// Save implements driver.EventStore
-func (m *memstore) Save(ctx context.Context, agg event.Aggregate) (uint64, error) {
-	events := agg.Events(true)
-	event.SetStreamID(agg.StreamID(), events...)
-
-	err := m.state.Modify(ctx, func(state *state) error {
-		stream := state.streams[agg.StreamID()]
-
-		last := uint64(len(stream))
-		if agg.StreamVersion() != last {
-			return fmt.Errorf("current version wrong %d != %d", agg.StreamVersion(), last)
-		}
-
-		for i := range events {
-			pos := last + uint64(i) + 1
-			event.SetPosition(events[i], pos)
-			stream = append(stream, events[i])
-		}
-
-		state.streams[agg.StreamID()] = stream
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	agg.Commit()
-
-	return uint64(len(events)), nil
+// FirstIndex for the streamID
+func (m *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
+	events, err := m.events.Copy(ctx)
+	return events.First().EventMeta().Position, err
 }
 
-func (m *memstore) FirstIndex(ctx context.Context, streamID string) (uint64, error) {
-	stream, err := m.state.Copy(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return stream.streams[streamID].First().EventMeta().Position, nil
-}
-func (m *memstore) LastIndex(ctx context.Context, streamID string) (uint64, error) {
-	stream, err := m.state.Copy(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return stream.streams[streamID].Last().EventMeta().Position, nil
-
+// LastIndex for the streamID
+func (m *eventLog) LastIndex(ctx context.Context) (uint64, error) {
+	events, err := m.events.Copy(ctx)
+	return events.Last().EventMeta().Position, err
 }

@@ -7,14 +7,24 @@ import (
 )
 
 type Driver interface {
-	Open(string) (EventStore, error)
+	Open(ctx context.Context, dsn string) (Driver, error)
+	EventLog(ctx context.Context, streamID string) (EventLog, error)
 }
 
-type EventStore interface {
-	Save(ctx context.Context, agg event.Aggregate) (uint64, error)
-	Load(ctx context.Context, agg event.Aggregate) error
-	Read(ctx context.Context, streamID string, pos, count int64) (event.Events, error)
-	Append(ctx context.Context, streamID string, events event.Events) (uint64, error)
-	FirstIndex(ctx context.Context, streamID string) (uint64, error)
-	LastIndex(ctx context.Context, streamID string) (uint64, error)
+type EventLog interface {
+	Read(ctx context.Context, pos, count int64) (event.Events, error)
+	Append(ctx context.Context, events event.Events, version uint64) (uint64, error)
+	FirstIndex(ctx context.Context) (uint64, error)
+	LastIndex(ctx context.Context) (uint64, error)
+}
+
+type Subscription interface {
+	Recv(context.Context) bool
+	Events(context.Context) (event.Events, error)
+	Close(context.Context) error
+}
+
+type EventStream interface {
+	Subscribe(ctx context.Context, streamID string) (Subscription, error)
+	Send(ctx context.Context, streamID string, events event.Events) error
 }

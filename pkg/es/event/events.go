@@ -54,7 +54,7 @@ func (lis Events) SetStreamID(streamID string) {
 }
 func (lis Events) First() Event {
 	if len(lis) == 0 {
-		return nilEvent
+		return NilEvent
 	}
 	return lis[0]
 }
@@ -66,7 +66,7 @@ func (lis Events) Rest() Events {
 }
 func (lis Events) Last() Event {
 	if len(lis) == 0 {
-		return nilEvent
+		return NilEvent
 	}
 	return lis[len(lis)-1]
 }
@@ -134,13 +134,14 @@ type Meta struct {
 func (m Meta) Created() time.Time {
 	return ulid.Time(m.EventID.Time())
 }
-func (m Meta) ID() string { return m.EventID.String() }
+func (m Meta) GetEventID() string { return m.EventID.String() }
 
-type _nilEvent struct{}
 
-func (_nilEvent) EventMeta() Meta {
+type nilEvent struct{}
+
+func (nilEvent) EventMeta() Meta {
 	return Meta{}
 }
-func (_nilEvent) SetEventMeta(eventMeta Meta) {}
+func (nilEvent) SetEventMeta(eventMeta Meta) {}
 
-var nilEvent _nilEvent
+var NilEvent nilEvent
