@@ -25,6 +25,6 @@ type Subscription interface {
 }
 
 type EventStream interface {
-	Subscribe(ctx context.Context, streamID string) (Subscription, error)
+	Subscribe(ctx context.Context, streamID string, start int64) (Subscription, error)
 	Send(ctx context.Context, streamID string, events event.Events) error
 }

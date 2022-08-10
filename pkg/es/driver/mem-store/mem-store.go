@@ -87,31 +87,9 @@ func (es *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Eve
 			return nil
 		}
 
-		if count == AllEvents {
-			count = int64(first - last)
-		}
-
-		var start uint64
-
-		switch {
-		case pos >= 0 && count > 0:
-			start = first + uint64(pos)
-		case pos < 0 && count > 0:
-			start = uint64(int64(last) + pos + 1)
-
-		case pos >= 0 && count < 0:
-			start = first + uint64(pos)
-			if pos > 1 {
-				start -= 2 // if pos is positive and count negative start before
-			}
-			if pos <= 1 {
-				return nil // if pos is one or zero and negative count nothing to return
-			}
-		case pos < 0 && count < 0:
-			start = uint64(int64(last) + pos)
-		}
-		if start >= last {
-			return nil // if start is after last and positive count nothing to return
+		start, count := math.PagerBox(first, last, pos, count)
+		if count == 0 {
+			return nil
 		}
 
 		events = make([]event.Event, math.Abs(count))

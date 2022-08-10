@@ -1,9 +1,11 @@
 package math_test
 
 import (
+	"log"
 	"testing"
 
 	"github.com/matryer/is"
+	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/math"
 )
 
@@ -45,4 +47,47 @@ func TestMath(t *testing.T) {
 		0.8618832818,
 	))
 
+}
+
+func TestPagerBox(t *testing.T) {
+	is := is.New(t)
+
+	tests := []struct {
+		first uint64
+		last  uint64
+		pos   int64
+		n     int64
+
+		start uint64
+		count int64
+	}{
+		{1, 10, 0, 10, 1, 10},
+		{1, 10, 0, 11, 1, 10},
+		{1, 5, 0, 10, 1, 5},
+		{1, 10, 4, 10, 5, 6},
+		{1, 10, 5, 10, 6, 5},
+		{1, 10, 0, -10, 0, 0},
+		{1, 10, 1, -1, 2, -1},
+		{1, 10, 1, -10, 2, -1},
+		{1, 10, -1, 1, 10, 1},
+		{1, 10, -2, 10, 9, 2},
+		{1, 10, -1, -1, 10, -1},
+		{1, 10, -2, -10, 9, -9},
+		{1, 10, 0, -10, 0, 0},
+		{1, 10, 10, 10, 0, 0},
+		{1, 10, 0, es.AllEvents, 1, 10},
+		{1, 10, -1, -es.AllEvents, 10, -10},
+	}
+
+	for _, tt := range tests {
+		start, count := math.PagerBox(tt.first, tt.last, tt.pos, tt.n)
+		if count > 0 {
+			log.Print(tt, "|", start, count, int64(start)+count-1)
+		} else {
+			log.Print(tt, "|", start, count, int64(start)+count+1)
+		}
+
+		is.Equal(start, tt.start)
+		is.Equal(count, tt.count)
+	}
 }

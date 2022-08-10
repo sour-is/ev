@@ -2,7 +2,6 @@ package locker
 
 import (
 	"context"
-	"log"
 )
 
 type Locked[T any] struct {
@@ -26,9 +25,6 @@ func (s *Locked[T]) Modify(ctx context.Context, fn func(*T) error) error {
 	select {
 	case state := <-s.state:
 		defer func() { s.state <- state }()
-		log.Printf("locker %T to %p", state, fn)
-		defer log.Printf("locker %T from %p", state, fn)
-
 		return fn(state)
 	case <-ctx.Done():
 		return ctx.Err()

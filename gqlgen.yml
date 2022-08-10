@@ -54,12 +54,12 @@ models:
       - github.com/99designs/gqlgen/graphql.Uint32
   Int:
     model:
-      - github.com/99designs/gqlgen/graphql.Int
       - github.com/99designs/gqlgen/graphql.Int64
       - github.com/99designs/gqlgen/graphql.Int32
-      - github.com/99designs/gqlgen/graphql.Uint
+      - github.com/99designs/gqlgen/graphql.Int
       - github.com/99designs/gqlgen/graphql.Uint64
       - github.com/99designs/gqlgen/graphql.Uint32
+      - github.com/99designs/gqlgen/graphql.Uint
   Time:
     model:
       - github.com/99designs/gqlgen/graphql.Time

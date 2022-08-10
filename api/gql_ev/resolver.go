@@ -3,7 +3,6 @@ package gql_ev
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/sour-is/ev/pkg/es"
@@ -66,13 +65,13 @@ func (r *Resolver) Posts(ctx context.Context, streamID string, paging *PageInput
 	}, nil
 }
 
-func (r *Resolver) PostAdded(ctx context.Context, streamID string) (<-chan *PostEvent, error) {
+func (r *Resolver) PostAdded(ctx context.Context, streamID string, after int64) (<-chan *PostEvent, error) {
 	es := r.es.EventStream()
 	if es == nil {
 		return nil, fmt.Errorf("EventStore does not implement streaming")
 	}
 
-	sub, err := es.Subscribe(ctx, streamID)
+	sub, err := es.Subscribe(ctx, streamID, after)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +82,7 @@ func (r *Resolver) PostAdded(ctx context.Context, streamID string) (<-chan *Post
 		defer func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
-			log.Print(sub.Close(ctx))
+			sub.Close(ctx)
 		}()
 
 		for sub.Recv(ctx) {

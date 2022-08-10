@@ -38,3 +38,30 @@ func Min[T ordered](i T, candidates ...T) T {
 	}
 	return i
 }
+
+func PagerBox(first, last uint64, pos, count int64) (uint64, int64) {
+	var start uint64
+
+	if pos >= 0 {
+		start = first + uint64(pos)
+	} else {
+		start = uint64(int64(last) + pos + 1)
+	}
+
+	switch {
+	case count > 0:
+		count = Min(count, int64(last-start)+1)
+
+	case pos >= 0 && count < 0:
+		count = Max(count, int64(first-start))
+
+	case pos < 0 && count < 0:
+		count = Max(count, int64(first-start)-1)
+	}
+
+	if count == 0 || (start < first && count <= 0) || (start > last && count >= 0) {
+		return 0, 0
+	}
+
+	return start, count
+}

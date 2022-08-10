@@ -81,7 +81,7 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		PostAdded func(childComplexity int, streamID string) int
+		PostAdded func(childComplexity int, streamID string, after int64) int
 	}
 
 	_Service struct {
@@ -93,7 +93,7 @@ type QueryResolver interface {
 	Posts(ctx context.Context, streamID string, paging *gql_ev.PageInput) (*gql_ev.Connection, error)
 }
 type SubscriptionResolver interface {
-	PostAdded(ctx context.Context, streamID string) (<-chan *gql_ev.PostEvent, error)
+	PostAdded(ctx context.Context, streamID string, after int64) (<-chan *gql_ev.PostEvent, error)
 }
 
 type executableSchema struct {
@@ -245,7 +245,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Subscription.PostAdded(childComplexity, args["streamID"].(string)), true
+		return e.complexity.Subscription.PostAdded(childComplexity, args["streamID"].(string), args["after"].(int64)), true
 
 	case "_Service.sdl":
 		if e.complexity._Service.SDL == nil {
@@ -372,7 +372,8 @@ directive @goTag(
     posts(streamID: String! paging: PageInput): Connection!
 }
 extend type Subscription {
-    postAdded(streamID: String!): PostEvent
+    """after == 0 start from begining, after == -1 start from end"""
+    postAdded(streamID: String! after: Int! = -1): PostEvent
 }
 type PostEvent implements Edge {
     id: ID!
@@ -461,6 +462,15 @@ func (ec *executionContext) field_Subscription_postAdded_args(ctx context.Contex
 		}
 	}
 	args["streamID"] = arg0
+	var arg1 int64
+	if tmp, ok := rawArgs["after"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("after"))
+		arg1, err = ec.unmarshalNInt2int64(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["after"] = arg1
 	return args, nil
 }
 
@@ -1434,7 +1444,7 @@ func (ec *executionContext) _Subscription_postAdded(ctx context.Context, field g
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Subscription().PostAdded(rctx, fc.Args["streamID"].(string))
+		return ec.resolvers.Subscription().PostAdded(rctx, fc.Args["streamID"].(string), fc.Args["after"].(int64))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -4122,6 +4132,21 @@ func (ec *executionContext) unmarshalNID2string(ctx context.Context, v interface
 
 func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
 	res := graphql.MarshalID(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
+func (ec *executionContext) unmarshalNInt2int64(ctx context.Context, v interface{}) (int64, error) {
+	res, err := graphql.UnmarshalInt64(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNInt2int64(ctx context.Context, sel ast.SelectionSet, v int64) graphql.Marshaler {
+	res := graphql.MarshalInt64(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")

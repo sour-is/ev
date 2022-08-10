@@ -2,7 +2,8 @@ extend type Query {
     posts(streamID: String! paging: PageInput): Connection!
 }
 extend type Subscription {
-    postAdded(streamID: String!): PostEvent
+    """after == 0 start from begining, after == -1 start from end"""
+    postAdded(streamID: String! after: Int! = -1): PostEvent
 }
 type PostEvent implements Edge {
     id: ID!
