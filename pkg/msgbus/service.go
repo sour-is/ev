@@ -67,7 +67,7 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 	var pos, count int64 = -1, -99
 	qry := r.URL.Query()
 
-	if i, err := strconv.ParseInt(qry.Get("idx"), 10, 64); err == nil {
+	if i, err := strconv.ParseInt(qry.Get("index"), 10, 64); err == nil {
 		pos = i
 	}
 	if i, err := strconv.ParseInt(qry.Get("n"), 10, 64); err == nil {
@@ -177,7 +177,7 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 	var pos int64 = -1
 	qry := r.URL.Query()
 
-	if i, err := strconv.ParseInt(qry.Get("idx"), 10, 64); err == nil {
+	if i, err := strconv.ParseInt(qry.Get("index"), 10, 64); err == nil {
 		pos = i
 	}
 

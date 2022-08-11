@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"context"
 	"log"
 	"net/http"
@@ -9,8 +10,9 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
-
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/rs/cors"
+
 	"github.com/sour-is/ev/api/gql_ev"
 	"github.com/sour-is/ev/internal/graph"
 	"github.com/sour-is/ev/internal/graph/generated"
@@ -53,9 +55,23 @@ func run(ctx context.Context) error {
 	s := http.Server{
 		Addr: env("EV_HTTP", ":8080"),
 	}
-	http.Handle("/", playground.Handler("GraphQL playground", "/gql"))
-	http.Handle("/gql", res.ChainMiddlewares(gql))
-	http.Handle("/event/", http.StripPrefix("/event/", svc))
+	mux := http.NewServeMux()
+
+	mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
+	mux.Handle("/gql", res.ChainMiddlewares(gql))
+	mux.Handle("/inbox/", http.StripPrefix("/inbox/", svc))
+
+	wk := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, `{
+  "endpoint": "https://ev.sour.is/inbox/01GA4Q3NDX4TPAZ2EZ8E92CQE6",
+  "key": "kex1pqwqatj6sge7qaqrsvk4u4yhue4x3vej8znetkwj6a5k0xds2fmqqe3plh"
+}`)
+			},
+	)
+	mux.Handle("/.well-known/salty/0ce550020ce36a9932b286b141edd515d33c2b0f51c715445de89ae106345993.json", wk)
+
+	s.Handler = cors.AllowAll().Handler(mux)
 
 	log.Print("Listen on ", s.Addr)
 	g, ctx := errgroup.WithContext(ctx)
