@@ -3,6 +3,7 @@ package diskstore
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,6 +116,7 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 		}
 
 		start, count := math.PagerBox(first, last, pos, count)
+		log.Println("reading", first, last, pos, count, start)
 		if count == 0 {
 			return nil
 		}

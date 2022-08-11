@@ -85,7 +85,7 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(r.Header.Get("Accept"), "application/json") {
 		w.Header().Add("Content-Type", "application/json")
 
-		if err = encodeJSON(w, first, events); err != nil {
+		if err = encodeJSON(w, first, events...); err != nil {
 			log.Print(err)
 
 			w.WriteHeader(http.StatusInternalServerError)
@@ -147,7 +147,7 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	if strings.Contains(r.Header.Get("Accept"), "application/json") {
 		w.Header().Add("Content-Type", "application/json")
-		if err = encodeJSON(w, first, events); err != nil {
+		if err = encodeJSON(w, first, events...); err != nil {
 			log.Print(err)
 
 			w.WriteHeader(http.StatusInternalServerError)
@@ -178,7 +178,7 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 	qry := r.URL.Query()
 
 	if i, err := strconv.ParseInt(qry.Get("index"), 10, 64); err == nil {
-		pos = i
+		pos = i - 1
 	}
 
 	log.Print("WS topic=", name, " idx=", pos)
@@ -235,15 +235,15 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		log.Println("got events ", len(events))
-		for _, e := range events {
-			e, ok := e.(*PostEvent)
+		for i := range events {
+			e, ok := events[i].(*PostEvent)
 			if !ok {
 				continue
 			}
 			log.Println("send", e.String())
 
 			var b bytes.Buffer
-			if err = encodeJSON(&b, first, events); err != nil {
+			if err = encodeJSON(&b, first, e); err != nil {
 				log.Print(err)
 			}
 
@@ -300,7 +300,7 @@ func fields(s string) []string {
 	return strings.Split(s, "/")
 }
 
-func encodeJSON(w io.Writer, first event.Event, events event.Events) error {
+func encodeJSON(w io.Writer, first event.Event, events ...event.Event) error {
 	out := make([]struct {
 		ID      uint64   `json:"id"`
 		Payload []byte   `json:"payload"`
