@@ -17,8 +17,12 @@ import (
 	"github.com/sour-is/ev/pkg/math"
 )
 
+type openlogs struct {
+	logs map[string]*locker.Locked[wal.Log]
+}
 type diskStore struct {
-	path string
+	path     string
+	openlogs *locker.Locked[openlogs]
 }
 
 const AppendOnly = es.AppendOnly
@@ -48,13 +52,26 @@ func (diskStore) Open(_ context.Context, dsn string) (driver.Driver, error) {
 		}
 	}
 
-	return &diskStore{path: path}, nil
+	logs := &openlogs{logs: make(map[string]*locker.Locked[wal.Log])}
+	return &diskStore{path: path, openlogs: locker.New(logs)}, nil
 }
 func (ds *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
 	el := &eventLog{streamID: streamID}
-	l, err := wal.Open(filepath.Join(ds.path, streamID), wal.DefaultOptions)
-	el.events = locker.New(l)
-	return el, err
+
+	return el, ds.openlogs.Modify(ctx, func(openlogs *openlogs) error {
+		if events, ok := openlogs.logs[streamID]; ok {
+			el.events = events
+			return nil
+		}
+
+		l, err := wal.Open(filepath.Join(ds.path, streamID), wal.DefaultOptions)
+		if err != nil {
+			return err
+		}
+		el.events = locker.New(l)
+		openlogs.logs[streamID] = el.events
+		return nil
+	})
 }
 
 type eventLog struct {
