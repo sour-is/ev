@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -14,8 +15,10 @@ import (
 
 	metricsExporter "github.com/logzio/go-metrics-sdk"
 	"github.com/logzio/logzio-go"
+	"go.uber.org/multierr"
 
 	"github.com/go-logr/stdr"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 
 	"go.opentelemetry.io/otel"
@@ -27,25 +30,30 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
-func Init(ctx context.Context) {
-	stop := []func() error {
+var tracer trace.Tracer
+
+func Init(ctx context.Context) func() error {
+	stop := []func() error{
 		initLogger(),
 		initMetrics(),
 		initTracing(ctx),
 	}
 
+	tracer = otel.Tracer(app_name)
 	reverse(stop)
 
-	go func() {
-		<-ctx.Done()
-		for _, fn := range stop {
-			if err := fn(); err != nil {
-				log.Println(err)
-			}
+	return func() error {
+		log.Println("flushing logs...")
+		errs := make([]error, len(stop))
+		for i, fn := range stop {
+			errs[i] = fn()
 		}
-	}()
+		log.Println("all stopped.")
+		return multierr.Combine(errs...)
+	}
 }
 
 type logzwriter struct {
@@ -118,7 +126,12 @@ func initLogger() func() error {
 	log.SetOutput(w)
 	otel.SetLogger(stdr.New(log.Default()))
 
-	return func() error { l.Stop(); return nil }
+	return func() error {
+		defer log.Println("logger stopped")
+		log.SetOutput(os.Stderr)
+		l.Stop()
+		return nil
+	}
 }
 func lzw(l io.Writer) io.Writer {
 	lz := &logzwriter{
@@ -183,6 +196,7 @@ func initMetrics() func() error {
 	return func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
+		defer log.Println("metrics stopped")
 		return cont.Stop(ctx)
 	}
 }
@@ -193,14 +207,19 @@ func initTracing(ctx context.Context) func() error {
 			semconv.ServiceNameKey.String("sour.is-ev"),
 		),
 	)
-	log.Println(wrap(err, "failed to create trace resource"))
+	if err != nil {
+		log.Println(wrap(err, "failed to create trace resource"))
+		return nil
+	}
 
 	traceExporter, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithInsecure(),
 		otlptracehttp.WithEndpoint("localhost:4318"),
 	)
-	log.Println(wrap(err, "failed to create trace exporter"))
-
+	if err != nil {
+		log.Println(wrap(err, "failed to create trace exporter"))
+		return nil
+	}
 	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
@@ -212,6 +231,7 @@ func initTracing(ctx context.Context) func() error {
 	return func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
+		defer log.Println("tracer stopped")
 		return wrap(tracerProvider.Shutdown(ctx), "failed to shutdown TracerProvider")
 	}
 }
@@ -223,10 +243,14 @@ func wrap(err error, s string) error {
 	return nil
 }
 func reverse[T any](s []T) {
-	first, last := 0, len(s) - 1
+	first, last := 0, len(s)-1
 	for first < last {
 		s[first], s[last] = s[last], s[first]
 		first++
 		last--
 	}
+}
+
+func htrace(h http.Handler, name string) http.Handler {
+	return otelhttp.NewHandler(h, name)
 }

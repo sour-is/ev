@@ -34,7 +34,12 @@ func main() {
 		<-ctx.Done()
 		defer cancel()
 	}()
-	Init(ctx)
+
+	stop := Init(ctx)
+	defer stop()
+
+	ctx, span := tracer.Start(ctx, "main")
+	defer span.End()
 
 	up, err := global.GetMeterProvider().Meter(app_name).NewFloat64UpDownCounter("up")
 	if err != nil {
@@ -43,10 +48,14 @@ func main() {
 	up.Add(ctx, 1.0)
 
 	if err := run(ctx); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
+
 }
 func run(ctx context.Context) error {
+	ctx, span := tracer.Start(ctx, "run")
+	defer span.End()
+
 	diskstore.Init(ctx)
 	memstore.Init(ctx)
 
@@ -70,8 +79,8 @@ func run(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
-	mux.Handle("/gql", res.ChainMiddlewares(gql))
-	mux.Handle("/inbox/", http.StripPrefix("/inbox/", svc))
+	mux.Handle("/gql", htrace(res.ChainMiddlewares(gql), "gql"))
+	mux.Handle("/inbox/", htrace(http.StripPrefix("/inbox/", svc), "inbox"))
 
 	wk := http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
