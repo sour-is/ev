@@ -1,2 +1,6 @@
 .vscode/
 data/
+.gitsecret/keys/random_seed
+!*.secret
+local.mk
+logzio.yml

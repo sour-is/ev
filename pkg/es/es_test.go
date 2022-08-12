@@ -2,6 +2,7 @@ package es_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -15,12 +16,19 @@ import (
 
 func TestES(t *testing.T) {
 	is := is.New(t)
+
 	ctx := context.Background()
 
 	err := event.Register(ctx, &ValueSet{})
 	is.NoErr(err)
 
 	memstore.Init(ctx)
+
+	_, err = es.Open(ctx, "mem")
+	is.True(errors.Is(err, es.ErrNoDriver))
+
+	_, err = es.Open(ctx, "bogo:")
+	is.True(errors.Is(err, es.ErrNoDriver))
 
 	es, err := es.Open(ctx, "mem:")
 	is.NoErr(err)
@@ -40,12 +48,25 @@ func TestES(t *testing.T) {
 	t.Log(thing.StreamVersion(), thing.Name, thing.Value)
 	t.Log("Wrote: ", i)
 
+	i, err = es.Append(ctx, "thing-time", event.NewEvents(&ValueSet{Value: "xxx"}))
+	is.NoErr(err)
+	is.Equal(i, uint64(1))
+
 	events, err := es.Read(ctx, "thing-time", -1, -11)
 	is.NoErr(err)
 
 	for i, e := range events {
 		t.Logf("event %d %d - %v\n", i, e.EventMeta().Position, e)
 	}
+
+	first, err := es.FirstIndex(ctx, "thing-time")
+	is.NoErr(err)
+	is.Equal(first, uint64(1))
+
+	last, err := es.LastIndex(ctx, "thing-time")
+	is.NoErr(err)
+	is.Equal(last, uint64(2))
+
 }
 
 type Thing struct {

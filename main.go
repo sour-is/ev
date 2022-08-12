@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/ravilushqa/otelgqlgen"
 	"github.com/rs/cors"
+	"go.opentelemetry.io/otel/metric/global"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sour-is/ev/api/gql_ev"
@@ -24,12 +26,21 @@ import (
 	"github.com/sour-is/ev/pkg/playground"
 )
 
+const app_name string = "sour.is-ev"
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	go func() {
 		<-ctx.Done()
 		defer cancel()
 	}()
+	Init(ctx)
+
+	up, err := global.GetMeterProvider().Meter(app_name).NewFloat64UpDownCounter("up")
+	if err != nil {
+		log.Fatal(err)
+	}
+	up.Add(ctx, 1.0)
 
 	if err := run(ctx); err != nil {
 		log.Fatal(err)
@@ -51,6 +62,7 @@ func run(ctx context.Context) error {
 
 	res := graph.New(gql_ev.New(es))
 	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: res}))
+	gql.Use(otelgqlgen.Middleware())
 
 	s := http.Server{
 		Addr: env("EV_HTTP", ":8080"),

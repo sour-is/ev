@@ -1,5 +1,6 @@
 export EV_DATA = mem:
 export EV_HTTP = :8080
+-include local.mk
 
 run: gen
 	go run .
@@ -20,7 +21,7 @@ endif
 	gqlgen
 
 load:
-	watch -n .1 "http POST localhost:8080/event/asdf/test a=b one=1 two:='{\"v\":2}' | jq"
+	watch -n .1 "http POST localhost:8080/inbox/asdf/test a=b one=1 two:='{\"v\":2}' | jq"
 
 bi:
 	go build .
