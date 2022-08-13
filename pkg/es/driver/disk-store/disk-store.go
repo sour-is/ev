@@ -9,7 +9,11 @@ import (
 	"strings"
 
 	"github.com/tidwall/wal"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.uber.org/multierr"
 
+	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/pkg/cache"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
@@ -17,25 +21,49 @@ import (
 	"github.com/sour-is/ev/pkg/math"
 )
 
+const CachSize = 1000
+
+type lockedWal = locker.Locked[wal.Log]
 type openlogs struct {
-	logs map[string]*locker.Locked[wal.Log]
+	logs *cache.Cache[string, *lockedWal]
 }
 type diskStore struct {
 	path     string
 	openlogs *locker.Locked[openlogs]
+
+	Mdisk_open  syncint64.Counter
+	Mdisk_evict syncint64.Counter
 }
 
 const AppendOnly = es.AppendOnly
 const AllEvents = es.AllEvents
 
 func Init(ctx context.Context) error {
-	es.Register(ctx, "file", &diskStore{})
-	return nil
+	m := logz.Meter(ctx)
+	var err, errs error
+
+	Mdisk_open, err := m.SyncInt64().Counter("disk_open")
+	errs = multierr.Append(errs, err)
+
+	Mdisk_evict, err := m.SyncInt64().Counter("disk_evict")
+	errs = multierr.Append(errs, err)
+
+	es.Register(ctx, "file", &diskStore{
+		Mdisk_open:  Mdisk_open,
+		Mdisk_evict: Mdisk_evict,
+	})
+
+	return errs
 }
 
 var _ driver.Driver = (*diskStore)(nil)
 
-func (diskStore) Open(_ context.Context, dsn string) (driver.Driver, error) {
+func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	d.Mdisk_open.Add(ctx, 1)
+
 	scheme, path, ok := strings.Cut(dsn, ":")
 	if !ok {
 		return nil, fmt.Errorf("expected scheme")
@@ -51,16 +79,34 @@ func (diskStore) Open(_ context.Context, dsn string) (driver.Driver, error) {
 			return nil, err
 		}
 	}
+	c, err := cache.NewWithEvict(CachSize, func(ctx context.Context, s string, l *lockedWal) {
+		l.Modify(ctx, func(w *wal.Log) error {
+			// logz.Mdisk_evict.Add(ctx, 1)
 
-	logs := &openlogs{logs: make(map[string]*locker.Locked[wal.Log])}
-	return &diskStore{path: path, openlogs: locker.New(logs)}, nil
+			err := w.Close()
+			if err != nil {
+				log.Print(err)
+			}
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	logs := &openlogs{logs: c}
+	return &diskStore{
+		path:        path,
+		openlogs:    locker.New(logs),
+		Mdisk_open:  d.Mdisk_open,
+		Mdisk_evict: d.Mdisk_evict,
+	}, nil
 }
 func (ds *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
 	el := &eventLog{streamID: streamID}
 
 	return el, ds.openlogs.Modify(ctx, func(openlogs *openlogs) error {
-		if events, ok := openlogs.logs[streamID]; ok {
-			el.events = events
+		if events, ok := openlogs.logs.Get(streamID); ok {
+			el.events = *events
 			return nil
 		}
 
@@ -69,7 +115,7 @@ func (ds *diskStore) EventLog(ctx context.Context, streamID string) (driver.Even
 			return err
 		}
 		el.events = locker.New(l)
-		openlogs.logs[streamID] = el.events
+		openlogs.logs.Add(ctx, streamID, el.events)
 		return nil
 	})
 }

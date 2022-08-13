@@ -12,12 +12,12 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/ravilushqa/otelgqlgen"
 	"github.com/rs/cors"
-	"go.opentelemetry.io/otel/metric/global"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sour-is/ev/api/gql_ev"
 	"github.com/sour-is/ev/internal/graph"
 	"github.com/sour-is/ev/internal/graph/generated"
+	"github.com/sour-is/ev/internal/logz"
 	"github.com/sour-is/ev/pkg/es"
 	diskstore "github.com/sour-is/ev/pkg/es/driver/disk-store"
 	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
@@ -26,7 +26,7 @@ import (
 	"github.com/sour-is/ev/pkg/playground"
 )
 
-const app_name string = "sour.is-ev"
+const AppName string = "sour.is-ev"
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
@@ -35,27 +35,20 @@ func main() {
 		defer cancel()
 	}()
 
-	stop := Init(ctx)
+	ctx, stop := logz.Init(ctx, AppName)
 	defer stop()
 
-	ctx, span := tracer.Start(ctx, "main")
-	defer span.End()
-
-	up, err := global.GetMeterProvider().Meter(app_name).NewFloat64UpDownCounter("up")
+	Mup, err := logz.Meter(ctx).SyncInt64().UpDownCounter("up")
 	if err != nil {
 		log.Fatal(err)
 	}
-	up.Add(ctx, 1.0)
+	Mup.Add(ctx, 1)
 
 	if err := run(ctx); err != nil {
 		log.Println(err)
 	}
-
 }
 func run(ctx context.Context) error {
-	ctx, span := tracer.Start(ctx, "run")
-	defer span.End()
-
 	diskstore.Init(ctx)
 	memstore.Init(ctx)
 
@@ -69,7 +62,11 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	res := graph.New(gql_ev.New(es))
+	r, err := gql_ev.New(es)
+	if err != nil {
+		return err
+	}
+	res := graph.New(r)
 	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: res}))
 	gql.Use(otelgqlgen.Middleware())
 
@@ -79,8 +76,9 @@ func run(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
-	mux.Handle("/gql", htrace(res.ChainMiddlewares(gql), "gql"))
-	mux.Handle("/inbox/", htrace(http.StripPrefix("/inbox/", svc), "inbox"))
+	mux.Handle("/gql", logz.Htrace(res.ChainMiddlewares(gql), "gql"))
+	mux.Handle("/inbox/", logz.Htrace(http.StripPrefix("/inbox/", svc), "inbox"))
+	mux.Handle("/metrics", logz.PromHTTP(ctx))
 
 	wk := http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {

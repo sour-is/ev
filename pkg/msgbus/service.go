@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/sour-is/ev/internal/logz"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 )
@@ -22,6 +23,9 @@ type service struct {
 }
 
 func New(ctx context.Context, es *es.EventStore) (*service, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
 	if err := event.Register(ctx, &PostEvent{}); err != nil {
 		return nil, err
 	}
@@ -36,6 +40,11 @@ var upgrader = websocket.Upgrader{
 }
 
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+	r = r.WithContext(ctx)
+
 	switch r.Method {
 	case http.MethodGet:
 		if r.Header.Get("Upgrade") == "websocket" {
@@ -52,6 +61,8 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	ctx, span := logz.Span(ctx)
+	defer span.End()
 
 	name, _, _ := strings.Cut(r.URL.Path, "/")
 	if name == "" {
@@ -100,6 +111,8 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 }
 func (s *service) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	ctx, span := logz.Span(ctx)
+	defer span.End()
 
 	name, tags, _ := strings.Cut(r.URL.Path, "/")
 	if name == "" {
@@ -162,6 +175,8 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 }
 func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	ctx, span := logz.Span(ctx)
+	defer span.End()
 
 	name, _, _ := strings.Cut(r.URL.Path, "/")
 	if name == "" {

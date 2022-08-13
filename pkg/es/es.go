@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sour-is/ev/internal/logz"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.uber.org/multierr"
 )
 
 type config struct {
@@ -23,20 +26,56 @@ var (
 )
 
 func Register(ctx context.Context, name string, d driver.Driver) error {
-	return drivers.Modify(ctx, func(c *config) error {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	m := logz.Meter(ctx)
+
+	var err, errs error
+	Mes_open, err = m.SyncInt64().Counter("es_open")
+	errs = multierr.Append(errs, err)
+
+	Mes_read, err = m.SyncInt64().Counter("es_read")
+	errs = multierr.Append(errs, err)
+
+	Mes_load, err = m.SyncInt64().Counter("es_load")
+	errs = multierr.Append(errs, err)
+
+	Mes_save, err = m.SyncInt64().Counter("es_save")
+	errs = multierr.Append(errs, err)
+
+	Mes_append, err = m.SyncInt64().Counter("es_append")
+	errs = multierr.Append(errs, err)
+
+	err = drivers.Modify(ctx, func(c *config) error {
 		if _, set := c.drivers[name]; set {
 			return fmt.Errorf("driver %s already set", name)
 		}
 		c.drivers[name] = d
 		return nil
 	})
+
+	return multierr.Append(errs, err)
 }
 
 type EventStore struct {
 	driver.Driver
 }
 
+var (
+	Mes_open   syncint64.Counter
+	Mes_read   syncint64.Counter
+	Mes_load   syncint64.Counter
+	Mes_save   syncint64.Counter
+	Mes_append syncint64.Counter
+)
+
 func Open(ctx context.Context, dsn string, options ...Option) (*EventStore, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	Mes_open.Add(ctx, 1)
+
 	name, _, ok := strings.Cut(dsn, ":")
 	if !ok {
 		return nil, fmt.Errorf("%w: no scheme", ErrNoDriver)
@@ -68,6 +107,11 @@ type Option interface {
 }
 
 func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	Mes_save.Add(ctx, 1)
+
 	l, err := es.EventLog(ctx, agg.StreamID())
 	if err != nil {
 		return 0, err
@@ -83,6 +127,11 @@ func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, er
 	return count, err
 }
 func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	Mes_load.Add(ctx, 1)
+
 	l, err := es.Driver.EventLog(ctx, agg.StreamID())
 	if err != nil {
 		return err
@@ -97,6 +146,11 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 	return nil
 }
 func (es *EventStore) Read(ctx context.Context, streamID string, pos, count int64) (event.Events, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	Mes_read.Add(ctx, 1)
+
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
 		return nil, err
@@ -104,6 +158,11 @@ func (es *EventStore) Read(ctx context.Context, streamID string, pos, count int6
 	return l.Read(ctx, pos, count)
 }
 func (es *EventStore) Append(ctx context.Context, streamID string, events event.Events) (uint64, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	Mes_append.Add(ctx, 1)
+
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
 		return 0, err
@@ -111,6 +170,9 @@ func (es *EventStore) Append(ctx context.Context, streamID string, events event.
 	return l.Append(ctx, events, AppendOnly)
 }
 func (es *EventStore) FirstIndex(ctx context.Context, streamID string) (uint64, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
 		return 0, err
@@ -118,6 +180,9 @@ func (es *EventStore) FirstIndex(ctx context.Context, streamID string) (uint64, 
 	return l.FirstIndex(ctx)
 }
 func (es *EventStore) LastIndex(ctx context.Context, streamID string) (uint64, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
 		return 0, err
@@ -138,7 +203,7 @@ func (es *EventStore) EventStream() driver.EventStream {
 }
 
 func Unwrap[T any](t T) T {
-	if unwrap, ok := any(t).(interface{Unwrap() T}); ok {
+	if unwrap, ok := any(t).(interface{ Unwrap() T }); ok {
 		return unwrap.Unwrap()
 	} else {
 		var zero T
