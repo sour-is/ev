@@ -8,6 +8,9 @@ import (
 )
 
 func Init(ctx context.Context, name string) (context.Context, func() error) {
+	ctx, span := Span(ctx)
+	defer span.End()
+
 	stop := [3]func() error{
 		initLogger(name),
 	}
@@ -20,7 +23,9 @@ func Init(ctx context.Context, name string) (context.Context, func() error) {
 		log.Println("flushing logs...")
 		errs := make([]error, len(stop))
 		for i, fn := range stop {
-			errs[i] = fn()
+			if fn != nil {
+				errs[i] = fn()
+			}
 		}
 		log.Println("all stopped.")
 		return multierr.Combine(errs...)

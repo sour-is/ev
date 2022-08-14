@@ -39,6 +39,9 @@ const AppendOnly = es.AppendOnly
 const AllEvents = es.AllEvents
 
 func Init(ctx context.Context) error {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	m := logz.Meter(ctx)
 	var err, errs error
 
@@ -80,8 +83,14 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 		}
 	}
 	c, err := cache.NewWithEvict(CachSize, func(ctx context.Context, s string, l *lockedWal) {
+		_, span := logz.Span(ctx)
+		defer span.End()
+
 		l.Modify(ctx, func(w *wal.Log) error {
-			// logz.Mdisk_evict.Add(ctx, 1)
+			_, span := logz.Span(ctx)
+			defer span.End()
+
+			d.Mdisk_evict.Add(ctx, 1)
 
 			err := w.Close()
 			if err != nil {
@@ -102,9 +111,15 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 	}, nil
 }
 func (ds *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	el := &eventLog{streamID: streamID}
 
 	return el, ds.openlogs.Modify(ctx, func(openlogs *openlogs) error {
+		_, span := logz.Span(ctx)
+		defer span.End()
+
 		if events, ok := openlogs.logs.Get(streamID); ok {
 			el.events = *events
 			return nil
@@ -128,10 +143,16 @@ type eventLog struct {
 var _ driver.EventLog = (*eventLog)(nil)
 
 func (es *eventLog) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	event.SetStreamID(es.streamID, events...)
 
 	var count uint64
 	err := es.events.Modify(ctx, func(l *wal.Log) error {
+		_, span := logz.Span(ctx)
+		defer span.End()
+
 		last, err := l.LastIndex()
 		if err != nil {
 			return err
@@ -145,6 +166,8 @@ func (es *eventLog) Append(ctx context.Context, events event.Events, version uin
 
 		batch := &wal.Batch{}
 		for i, e := range events {
+			span.AddEvent(fmt.Sprintf("append event %d of %d", i, len(events)))
+
 			b, err = event.MarshalText(e)
 			if err != nil {
 				return err
@@ -162,9 +185,15 @@ func (es *eventLog) Append(ctx context.Context, events event.Events, version uin
 	return count, err
 }
 func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, error) {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	var events event.Events
 
 	err := es.events.Modify(ctx, func(stream *wal.Log) error {
+		_, span := logz.Span(ctx)
+		defer span.End()
+
 		first, err := stream.FirstIndex()
 		if err != nil {
 			return err
@@ -186,6 +215,8 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 
 		events = make([]event.Event, math.Abs(count))
 		for i := range events {
+			span.AddEvent(fmt.Sprintf("read event %d of %d", i, len(events)))
+
 			// ---
 			var b []byte
 			b, err = stream.Read(start)
@@ -219,6 +250,9 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 	return events, err
 }
 func (es *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	var idx uint64
 	var err error
 
@@ -230,6 +264,9 @@ func (es *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	return idx, err
 }
 func (es *eventLog) LastIndex(ctx context.Context) (uint64, error) {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	var idx uint64
 	var err error
 

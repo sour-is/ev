@@ -111,6 +111,7 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 }
 func (s *service) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	ctx, span := logz.Span(ctx)
 	defer span.End()
 
@@ -127,7 +128,8 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 
 	b, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 	if err != nil {
-		log.Print(err)
+		span.RecordError(err)
+
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -142,9 +144,10 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 		Payload: b,
 		Tags:    fields(tags),
 	})
-	_, err = s.es.Append(r.Context(), "post-"+name, events)
+
+	_, err = s.es.Append(ctx, "post-"+name, events)
 	if err != nil {
-		log.Print(err)
+		span.RecordError(err)
 
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -155,13 +158,14 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m := events.First().EventMeta()
-	log.Print("POST topic=", name, " tags=", tags, " idx=", m.Position, " id=", m.EventID)
+	span.AddEvent(fmt.Sprint("POST topic=", name, " tags=", tags, " idx=", m.Position, " id=", m.EventID))
+	// log.Print("POST topic=", name, " tags=", tags, " idx=", m.Position, " id=", m.EventID)
 
 	w.WriteHeader(http.StatusAccepted)
 	if strings.Contains(r.Header.Get("Accept"), "application/json") {
 		w.Header().Add("Content-Type", "application/json")
 		if err = encodeJSON(w, first, events...); err != nil {
-			log.Print(err)
+			span.RecordError(err)
 
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -169,6 +173,7 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	span.AddEvent("finish response")
 
 	w.Header().Add("Content-Type", "text/plain")
 	fmt.Fprintf(w, "OK %d %s", m.Position, m.EventID)

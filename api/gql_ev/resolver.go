@@ -44,6 +44,9 @@ func New(es *es.EventStore) (*Resolver, error) {
 
 // Posts is the resolver for the events field.
 func (r *Resolver) Posts(ctx context.Context, streamID string, paging *PageInput) (*Connection, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
 	r.Mresolver_posts.Add(ctx, 1)
 
 	lis, err := r.es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
@@ -53,6 +56,7 @@ func (r *Resolver) Posts(ctx context.Context, streamID string, paging *PageInput
 
 	edges := make([]Edge, 0, len(lis))
 	for i := range lis {
+		span.AddEvent(fmt.Sprint("post ", i, " of ", len(lis)))
 		e := lis[i]
 		m := e.EventMeta()
 
@@ -89,6 +93,9 @@ func (r *Resolver) Posts(ctx context.Context, streamID string, paging *PageInput
 }
 
 func (r *Resolver) PostAdded(ctx context.Context, streamID string, after int64) (<-chan *PostEvent, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
 	r.Mresolver_post_added.Add(ctx, 1)
 
 	es := r.es.EventStream()
