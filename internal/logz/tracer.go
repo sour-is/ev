@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"runtime"
 	"strconv"
 	"time"
@@ -54,6 +53,13 @@ func Span(ctx context.Context, opts ...trace.SpanStartOption) (context.Context, 
 	return ctx, span
 }
 
+type SampleRate string
+
+const (
+	SampleAlways SampleRate = "always"
+	SampleNever  SampleRate = "never"
+)
+
 func initTracing(ctx context.Context, name string) (context.Context, func() error) {
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -76,15 +82,15 @@ func initTracing(ctx context.Context, name string) (context.Context, func() erro
 	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
 
 	var sample sdktrace.TracerProviderOption
-	sampleRate := env("LOGZIO_TRACE_SAMPLE", "always")
+	sampleRate := SampleRate(env("EV_TRACE_SAMPLE", string(SampleNever)))
 	switch sampleRate {
 	case "always":
 		sample = sdktrace.WithSampler(sdktrace.AlwaysSample())
 	case "never":
 		sample = sdktrace.WithSampler(sdktrace.NeverSample())
 	default:
-		if v, err := strconv.Atoi(sampleRate); err != nil {
-			sample = sdktrace.WithSampler(sdktrace.AlwaysSample())
+		if v, err := strconv.Atoi(string(sampleRate)); err != nil {
+			sample = sdktrace.WithSampler(sdktrace.NeverSample())
 		} else {
 			sample = sdktrace.WithSampler(sdktrace.TraceIDRatioBased(float64(v) * 0.01))
 		}
@@ -121,13 +127,6 @@ func reverse[T any](s []T) {
 		first++
 		last--
 	}
-}
-func env(name, defaultValue string) string {
-	if v := os.Getenv(name); v != "" {
-		log.Println("# ", name, " = ", v)
-		return v
-	}
-	return defaultValue
 }
 
 func Htrace(h http.Handler, name string) http.Handler {

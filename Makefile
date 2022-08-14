@@ -1,9 +1,14 @@
-export EV_DATA = mem:
-export EV_HTTP = :8080
+export PATH:=$(shell go env GOPATH)/bin:$(PATH)
+export EV_DATA=mem:
+export EV_HTTP=:8080
+export EV_TRACE_SAMPLE=always
 -include local.mk
 
 run: gen
-	go run .
+ifeq (, $(shell which air))
+	go install github.com/cosmtrek/air@latest
+endif
+	air
 test:
 	go test -cover -race ./...
 

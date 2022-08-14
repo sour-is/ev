@@ -3,6 +3,7 @@ package logz
 import (
 	"context"
 	"log"
+	"os"
 
 	"go.uber.org/multierr"
 )
@@ -30,4 +31,12 @@ func Init(ctx context.Context, name string) (context.Context, func() error) {
 		log.Println("all stopped.")
 		return multierr.Combine(errs...)
 	}
+}
+
+func env(name, defaultValue string) string {
+	if v := os.Getenv(name); v != "" {
+		log.Println("# ", name, " = ", v)
+		return v
+	}
+	return defaultValue
 }

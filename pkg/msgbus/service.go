@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/pkg/domain"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 )
@@ -50,6 +52,11 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.websocket(w, r)
 			return
 		}
+		if strings.HasPrefix(r.URL.Path, "/.well-known/salty") {
+			s.getUser(w, r)
+			return
+		}
+
 		s.get(w, r)
 	case http.MethodPost, http.MethodPut:
 		s.post(w, r)
@@ -106,6 +113,41 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 
 	for i := range events {
 		fmt.Fprintln(w, events[i])
+	}
+}
+func (s *service) getUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	addr := "saltyuser-" + strings.TrimPrefix(r.URL.Path, "/.well-known/salty/")
+	addr = strings.TrimSuffix(addr, ".json")
+
+	span.AddEvent(fmt.Sprint("find ", addr))
+	a, err := es.Update(ctx, s.es, addr, func(ctx context.Context, agg *domain.SaltyUser) error { return nil })
+	switch {
+	case errors.Is(err, event.ErrShouldExist):
+		span.RecordError(err)
+
+		w.WriteHeader(http.StatusNotFound)
+		return
+	case err != nil:
+		span.RecordError(err)
+
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(
+		struct {
+			Endpoint string `json:"endpoint"`
+			Key      string `json:"key"`
+		}{
+			Endpoint: a.Inbox.String(),
+			Key:      a.Pubkey.ID().String(),
+		})
+	if err != nil {
+		span.RecordError(err)
 	}
 }
 func (s *service) post(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +271,7 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 
 	es := s.es.EventStream()
 	if es == nil {
-		span.AddEvent(fmt.Sprint("EventStore does not implement streaming"))
+		span.AddEvent("EventStore does not implement streaming")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -242,11 +284,11 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		span.AddEvent(fmt.Sprint("stop ws"))
+		span.AddEvent("stop ws")
 		sub.Close(ctx)
 	}()
 
-	span.AddEvent(fmt.Sprint("start ws"))
+	span.AddEvent("start ws")
 	for sub.Recv(ctx) {
 		events, err := sub.Events(ctx)
 		if err != nil {

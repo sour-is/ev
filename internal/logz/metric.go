@@ -8,14 +8,12 @@ import (
 	"runtime/debug"
 	"time"
 
-	// metricsExporter "github.com/logzio/go-metrics-sdk"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
-	"go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
@@ -61,7 +59,7 @@ func initMetrics(ctx context.Context, name string) (context.Context, func() erro
 			aggregation.CumulativeTemporalitySelector(),
 			processor.WithMemory(true),
 		),
-		basic.WithResource(
+		controller.WithResource(
 			resource.NewWithAttributes(
 				semconv.SchemaURL,
 				attribute.String("app", name),

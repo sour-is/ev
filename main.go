@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -82,17 +81,8 @@ func run(ctx context.Context) error {
 	mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
 	mux.Handle("/gql", logz.Htrace(res.ChainMiddlewares(gql), "gql"))
 	mux.Handle("/inbox/", logz.Htrace(http.StripPrefix("/inbox/", svc), "inbox"))
+	mux.Handle("/.well-known/salty/", logz.Htrace(svc, "lookup"))
 	mux.Handle("/metrics", logz.PromHTTP(ctx))
-
-	wk := http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintln(w, `{
-  "endpoint": "https://ev.sour.is/inbox/01GA4Q3NDX4TPAZ2EZ8E92CQE6",
-  "key": "kex1pqwqatj6sge7qaqrsvk4u4yhue4x3vej8znetkwj6a5k0xds2fmqqe3plh"
-}`)
-		},
-	)
-	mux.Handle("/.well-known/salty/0ce550020ce36a9932b286b141edd515d33c2b0f51c715445de89ae106345993.json", wk)
 
 	s.Handler = cors.AllowAll().Handler(mux)
 
