@@ -3,6 +3,8 @@ package event
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -28,6 +30,9 @@ func getULID() ulid.ULID {
 type Event interface {
 	EventMeta() Meta
 	SetEventMeta(Meta)
+
+	encoding.TextMarshaler
+	encoding.TextUnmarshaler
 }
 
 // Events is a list of events
@@ -136,12 +141,18 @@ func (m Meta) Created() time.Time {
 }
 func (m Meta) GetEventID() string { return m.EventID.String() }
 
-
 type nilEvent struct{}
 
-func (nilEvent) EventMeta() Meta {
+func (*nilEvent) EventMeta() Meta {
 	return Meta{}
 }
-func (nilEvent) SetEventMeta(eventMeta Meta) {}
+func (*nilEvent) SetEventMeta(eventMeta Meta) {}
 
-var NilEvent nilEvent
+var NilEvent = &nilEvent{}
+
+func (e *nilEvent) MarshalText() ([]byte, error) {
+	return json.Marshal(e)
+}
+func (e *nilEvent) UnmarshalText(b []byte) error {
+	return json.Unmarshal(b, e)
+}

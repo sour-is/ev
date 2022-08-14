@@ -30,8 +30,6 @@ type UnknownEvent struct {
 }
 
 var _ Event = (*UnknownEvent)(nil)
-var _ json.Marshaler = (*UnknownEvent)(nil)
-var _ json.Unmarshaler = (*UnknownEvent)(nil)
 
 func NewUnknownEventFromValues(eventType string, meta Meta, values url.Values) *UnknownEvent {
 	jsonValues := make(map[string]json.RawMessage, len(values))
@@ -61,10 +59,10 @@ func (u UnknownEvent) EventType() string { return u.eventType }
 func (u *UnknownEvent) SetEventMeta(em Meta) {
 	u.eventMeta = em
 }
-func (u *UnknownEvent) UnmarshalJSON(b []byte) error {
+func (u *UnknownEvent) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, &u.values)
 }
-func (u *UnknownEvent) MarshalJSON() ([]byte, error) {
+func (u *UnknownEvent) MarshalText() ([]byte, error) {
 	return json.Marshal(u.values)
 }
 
@@ -102,17 +100,17 @@ func GetContainer(ctx context.Context, s string) Event {
 	var e Event
 
 	eventTypes.Modify(ctx, func(c *config) error {
-			typ, ok := c.eventTypes[s]
-			if !ok {
-				return fmt.Errorf("not defined")
-			}
-			newType := reflect.New(typ)
-			newInterface := newType.Interface()
-			if iface, ok := newInterface.(Event); ok {
-				e = iface
-				return nil
-			}
-			return fmt.Errorf("failed")
+		typ, ok := c.eventTypes[s]
+		if !ok {
+			return fmt.Errorf("not defined")
+		}
+		newType := reflect.New(typ)
+		newInterface := newType.Interface()
+		if iface, ok := newInterface.(Event); ok {
+			e = iface
+			return nil
+		}
+		return fmt.Errorf("failed")
 	})
 	if e == nil {
 		e = &UnknownEvent{eventType: s}
@@ -136,14 +134,8 @@ func MarshalText(e Event) (txt []byte, err error) {
 		return nil, err
 	}
 	b.WriteRune('\t')
-	if enc, ok := e.(encoding.TextMarshaler); ok {
-		if txt, err = enc.MarshalText(); err != nil {
-			return nil, err
-		}
-	} else {
-		if txt, err = json.Marshal(e); err != nil {
-			return nil, err
-		}
+	if txt, err = e.MarshalText(); err != nil {
+		return nil, err
 	}
 	_, err = b.Write(txt)
 
@@ -167,15 +159,10 @@ func UnmarshalText(ctx context.Context, txt []byte, pos uint64) (e Event, err er
 	eventType := string(sp[2])
 	e = GetContainer(ctx, eventType)
 
-	if enc, ok := e.(encoding.TextUnmarshaler); ok {
-		if err = enc.UnmarshalText(sp[3]); err != nil {
-			return nil, err
-		}
-	} else {
-		if err = json.Unmarshal(sp[3], e); err != nil {
-			return nil, err
-		}
+	if err = e.UnmarshalText(sp[3]); err != nil {
+		return nil, err
 	}
+
 	e.SetEventMeta(m)
 
 	return e, nil

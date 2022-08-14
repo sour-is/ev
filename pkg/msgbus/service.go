@@ -293,6 +293,13 @@ func (e *PostEvent) SetEventMeta(eventMeta event.Meta) {
 	}
 	e.eventMeta = eventMeta
 }
+func (e *PostEvent) MarshalText() ([]byte, error) {
+	return json.Marshal(e)
+}
+func (e *PostEvent) UnmarshalText(b []byte) error {
+	return json.Unmarshal(b, e)
+}
+
 func (e *PostEvent) String() string {
 	var b bytes.Buffer
 

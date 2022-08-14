@@ -2,6 +2,7 @@ package es_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -109,6 +110,12 @@ func (e *ValueSet) SetEventMeta(eventMeta event.Meta) {
 		return
 	}
 	e.eventMeta = eventMeta
+}
+func (e *ValueSet) MarshalText() ([]byte, error) {
+	return json.Marshal(e)
+}
+func (e *ValueSet) UnmarshalText(b []byte) error {
+	return json.Unmarshal(b, e)
 }
 
 var (

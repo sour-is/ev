@@ -3,6 +3,7 @@ package event_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/matryer/is"
@@ -27,6 +28,12 @@ func (e *DummyEvent) SetEventMeta(eventMeta event.Meta) {
 		return
 	}
 	e.eventMeta = eventMeta
+}
+func (e *DummyEvent) MarshalText() ([]byte, error) {
+	return json.Marshal(e)
+}
+func (e *DummyEvent) UnmarshalText(b []byte) error {
+	return json.Unmarshal(b, e)
 }
 
 func TestEventEncode(t *testing.T) {

@@ -1,6 +1,7 @@
 package event_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/sour-is/ev/pkg/es/event"
@@ -48,6 +49,13 @@ func (e *ValueApplied) SetEventMeta(m event.Meta) {
 	if e != nil {
 		e.eventMeta = m
 	}
+}
+
+func (e *ValueApplied) MarshalText() ([]byte, error) {
+	return json.Marshal(e)
+}
+func (e *ValueApplied) UnmarshalText(b []byte) error {
+	return json.Unmarshal(b, e)
 }
 
 func TestAggregate(t *testing.T) {

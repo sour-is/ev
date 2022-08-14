@@ -1,8 +1,10 @@
 package domain
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding"
 	"fmt"
 	"log"
 	"strings"
@@ -51,14 +53,14 @@ func (a *SaltyUser) OnUserRegister(name string, pubkey *keys.EdX25519PublicKey) 
 }
 
 type UserRegistered struct {
-	Name     string
-	Pubkey   *keys.EdX25519PublicKey
-	Endpoint ulid.ULID
+	Name   string
+	Pubkey *keys.EdX25519PublicKey
 
 	eventMeta event.Meta
 }
 
 var _ event.Event = (*UserRegistered)(nil)
+var _ encoding.TextMarshaler = (*UserRegistered)(nil)
 
 func (e *UserRegistered) EventMeta() event.Meta {
 	if e == nil {
@@ -71,4 +73,24 @@ func (e *UserRegistered) SetEventMeta(m event.Meta) {
 	if e != nil {
 		e.eventMeta = m
 	}
+}
+func (e *UserRegistered) MarshalText() (text []byte, err error) {
+	var b bytes.Buffer
+	b.WriteString(e.Name)
+	b.WriteRune('\t')
+	b.WriteString(e.Pubkey.String())
+
+	return b.Bytes(), nil
+}
+func (e *UserRegistered) UnmarshalText(b []byte) error {
+	name, pub, ok := bytes.Cut(b, []byte{'\t'})
+	if !ok {
+		return fmt.Errorf("parse error")
+	}
+
+	var err error
+	e.Name = string(name)
+	e.Pubkey, err = keys.NewEdX25519PublicKeyFromID(keys.ID(pub))
+
+	return err
 }
