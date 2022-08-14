@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -20,17 +21,18 @@ import (
 )
 
 type service struct {
-	es *es.EventStore
+	baseURL string
+	es      *es.EventStore
 }
 
-func New(ctx context.Context, es *es.EventStore) (*service, error) {
+func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, error) {
 	ctx, span := logz.Span(ctx)
 	defer span.End()
 
 	if err := event.Register(ctx, &PostEvent{}); err != nil {
 		return nil, err
 	}
-	return &service{es}, nil
+	return &service{baseURL, es}, nil
 }
 
 var upgrader = websocket.Upgrader{
@@ -143,7 +145,7 @@ func (s *service) getUser(w http.ResponseWriter, r *http.Request) {
 			Endpoint string `json:"endpoint"`
 			Key      string `json:"key"`
 		}{
-			Endpoint: a.Inbox.String(),
+			Endpoint: path.Join(s.baseURL, a.Inbox.String()),
 			Key:      a.Pubkey.ID().String(),
 		})
 	if err != nil {

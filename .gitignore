@@ -4,3 +4,4 @@ data/
 !*.secret
 local.mk
 logzio.yml
+tmp/

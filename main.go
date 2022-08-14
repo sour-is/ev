@@ -60,7 +60,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	svc, err := msgbus.New(ctx, es)
+	svc, err := msgbus.New(ctx, es, env("EV_BASE_URL", "https://ev.sour.is/inbox/"))
 	if err != nil {
 		return err
 	}
