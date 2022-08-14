@@ -110,13 +110,17 @@ func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, er
 	ctx, span := logz.Span(ctx)
 	defer span.End()
 
+	events := agg.Events(true)
+	if len(events) == 0 {
+		return 0, nil
+	}
+
 	Mes_save.Add(ctx, 1)
 
 	l, err := es.EventLog(ctx, agg.StreamID())
 	if err != nil {
 		return 0, err
 	}
-	events := agg.Events(true)
 
 	count, err := l.Append(ctx, events, agg.StreamVersion())
 	if err != nil {
@@ -141,6 +145,7 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 	if err != nil {
 		return err
 	}
+
 	event.Append(agg, events...)
 
 	return nil
@@ -189,7 +194,6 @@ func (es *EventStore) LastIndex(ctx context.Context, streamID string) (uint64, e
 	}
 	return l.LastIndex(ctx)
 }
-
 func (es *EventStore) EventStream() driver.EventStream {
 	d := es.Driver
 	for d != nil {
@@ -212,3 +216,65 @@ func Unwrap[T any](t T) T {
 }
 
 var ErrNoDriver = errors.New("no driver")
+
+type PA[T any] interface {
+	event.Aggregate
+	*T
+}
+
+// Create uses fn to create a new aggregate and store in db.
+func Create[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string, fn func(context.Context, T) error) (agg T, err error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	agg = new(A)
+	agg.SetStreamID(streamID)
+
+	if err = es.Load(ctx, agg); err != nil {
+		return
+	}
+
+	if err = event.NotExists(agg); err != nil {
+		return
+	}
+
+	if err = fn(ctx, agg); err != nil {
+		return
+	}
+
+	var i uint64
+	if i, err = es.Save(ctx, agg); err != nil {
+		return
+	}
+
+	span.AddEvent(fmt.Sprint("wrote events = ", i))
+
+	return
+}
+
+// Update uses fn to update an exsisting aggregate and store in db.
+func Update[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string, fn func(context.Context, T) error) (agg T, err error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	agg = new(A)
+	agg.SetStreamID(streamID)
+
+	if err = es.Load(ctx, agg); err != nil {
+		return
+	}
+
+	if err = event.ShouldExist(agg); err != nil {
+		return
+	}
+
+	if err = fn(ctx, agg); err != nil {
+		return
+	}
+
+	if _, err = es.Save(ctx, agg); err != nil {
+		return
+	}
+
+	return
+}

@@ -18,6 +18,7 @@ import (
 	"github.com/sour-is/ev/internal/graph"
 	"github.com/sour-is/ev/internal/graph/generated"
 	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/pkg/domain"
 	"github.com/sour-is/ev/pkg/es"
 	diskstore "github.com/sour-is/ev/pkg/es/driver/disk-store"
 	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
@@ -44,13 +45,16 @@ func main() {
 	}
 	Mup.Add(ctx, 1)
 
-	if err := run(ctx); err != nil {
-		log.Println(err)
+	if err := run(ctx); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
 	}
 }
 func run(ctx context.Context) error {
 	diskstore.Init(ctx)
 	memstore.Init(ctx)
+	if err := domain.Init(ctx); err != nil {
+		return err
+	}
 
 	es, err := es.Open(ctx, env("EV_DATA", "file:data"), streamer.New(ctx))
 	if err != nil {

@@ -1,7 +1,6 @@
 package math_test
 
 import (
-	"log"
 	"testing"
 
 	"github.com/matryer/is"
@@ -82,9 +81,9 @@ func TestPagerBox(t *testing.T) {
 	for _, tt := range tests {
 		start, count := math.PagerBox(tt.first, tt.last, tt.pos, tt.n)
 		if count > 0 {
-			log.Print(tt, "|", start, count, int64(start)+count-1)
+			t.Log(tt, "|", start, count, int64(start)+count-1)
 		} else {
-			log.Print(tt, "|", start, count, int64(start)+count+1)
+			t.Log(tt, "|", start, count, int64(start)+count+1)
 		}
 
 		is.Equal(start, tt.start)

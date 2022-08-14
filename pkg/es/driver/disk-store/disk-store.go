@@ -3,7 +3,6 @@ package diskstore
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,12 +93,14 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 
 			err := w.Close()
 			if err != nil {
-				log.Print(err)
+				span.RecordError(err)
+				return err
 			}
 			return nil
 		})
 	})
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 	logs := &openlogs{logs: c}
@@ -127,6 +128,7 @@ func (ds *diskStore) EventLog(ctx context.Context, streamID string) (driver.Even
 
 		l, err := wal.Open(filepath.Join(ds.path, streamID), wal.DefaultOptions)
 		if err != nil {
+			span.RecordError(err)
 			return err
 		}
 		el.events = locker.New(l)
@@ -155,6 +157,7 @@ func (es *eventLog) Append(ctx context.Context, events event.Events, version uin
 
 		last, err := l.LastIndex()
 		if err != nil {
+			span.RecordError(err)
 			return err
 		}
 
@@ -170,6 +173,8 @@ func (es *eventLog) Append(ctx context.Context, events event.Events, version uin
 
 			b, err = event.MarshalText(e)
 			if err != nil {
+				span.RecordError(err)
+
 				return err
 			}
 			pos := last + uint64(i) + 1
@@ -196,10 +201,12 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 
 		first, err := stream.FirstIndex()
 		if err != nil {
+			span.RecordError(err)
 			return err
 		}
 		last, err := stream.LastIndex()
 		if err != nil {
+			span.RecordError(err)
 			return err
 		}
 		// ---
@@ -208,7 +215,7 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 		}
 
 		start, count := math.PagerBox(first, last, pos, count)
-		log.Println("reading", first, last, pos, count, start)
+		span.AddEvent(fmt.Sprint("reading", first, last, pos, count, start))
 		if count == 0 {
 			return nil
 		}
@@ -221,10 +228,12 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 			var b []byte
 			b, err = stream.Read(start)
 			if err != nil {
+				span.RecordError(err)
 				return err
 			}
 			events[i], err = event.UnmarshalText(ctx, b, start)
 			if err != nil {
+				span.RecordError(err)
 				return err
 			}
 			// ---
@@ -242,12 +251,13 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 		return nil
 	})
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
 	event.SetStreamID(es.streamID, events...)
 
-	return events, err
+	return events, nil
 }
 func (es *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	_, span := logz.Span(ctx)
@@ -276,4 +286,7 @@ func (es *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 	})
 
 	return idx, err
+}
+func (es *eventLog) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
+	panic("not implemented")
 }

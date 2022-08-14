@@ -1,0 +1,14 @@
+extend type Query {
+    saltyUser(nick: String!): SaltyUser
+}
+
+extend type Mutation {
+    createSaltyUser(nick: String! pubkey: String!): SaltyUser
+}
+
+type SaltyUser {
+    nick:     String!
+    pubkey:   String!
+    inbox:    String!
+    endpoint: String!
+}

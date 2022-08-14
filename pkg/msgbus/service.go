@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -85,10 +84,10 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 		count = i
 	}
 
-	log.Print("GET topic=", name, " idx=", pos, " n=", count)
+	span.AddEvent(fmt.Sprint("GET topic=", name, " idx=", pos, " n=", count))
 	events, err := s.es.Read(ctx, "post-"+name, pos, count)
 	if err != nil {
-		log.Print(err)
+		span.RecordError(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -97,7 +96,7 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 
 		if err = encodeJSON(w, first, events...); err != nil {
-			log.Print(err)
+			span.RecordError(err)
 
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -159,7 +158,6 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 
 	m := events.First().EventMeta()
 	span.AddEvent(fmt.Sprint("POST topic=", name, " tags=", tags, " idx=", m.Position, " id=", m.EventID))
-	// log.Print("POST topic=", name, " tags=", tags, " idx=", m.Position, " id=", m.EventID)
 
 	w.WriteHeader(http.StatusAccepted)
 	if strings.Contains(r.Header.Get("Accept"), "application/json") {
@@ -201,11 +199,11 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 		pos = i - 1
 	}
 
-	log.Print("WS topic=", name, " idx=", pos)
+	span.AddEvent(fmt.Sprint("WS topic=", name, " idx=", pos))
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
+		span.RecordError(err)
 		return
 	}
 	defer c.Close()
@@ -222,54 +220,54 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 			}
 			mt, message, err := c.ReadMessage()
 			if err != nil {
-				log.Println("read:", err)
+				span.RecordError(err)
 				return
 			}
-			log.Printf("recv: %d %s", mt, message)
+			span.AddEvent(fmt.Sprintf("recv: %d %s", mt, message))
 		}
 	}()
 
 	es := s.es.EventStream()
 	if es == nil {
-		log.Println("EventStore does not implement streaming")
+		span.AddEvent(fmt.Sprint("EventStore does not implement streaming"))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	sub, err := es.Subscribe(ctx, "post-"+name, pos)
 	if err != nil {
-		log.Println(err)
+		span.RecordError(err)
 		return
 	}
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		log.Println("stop ws")
+		span.AddEvent(fmt.Sprint("stop ws"))
 		sub.Close(ctx)
 	}()
 
-	log.Println("start ws")
+	span.AddEvent(fmt.Sprint("start ws"))
 	for sub.Recv(ctx) {
 		events, err := sub.Events(ctx)
 		if err != nil {
 			break
 		}
-		log.Println("got events ", len(events))
+		span.AddEvent(fmt.Sprint("got events ", len(events)))
 		for i := range events {
 			e, ok := events[i].(*PostEvent)
 			if !ok {
 				continue
 			}
-			log.Println("send", e.String())
+			span.AddEvent(fmt.Sprint("send", i, e.String()))
 
 			var b bytes.Buffer
 			if err = encodeJSON(&b, first, e); err != nil {
-				log.Print(err)
+				span.RecordError(err)
 			}
 
 			err = c.WriteMessage(websocket.TextMessage, b.Bytes())
 			if err != nil {
-				log.Println("write:", err)
+				span.RecordError(err)
 				break
 			}
 		}

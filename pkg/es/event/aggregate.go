@@ -9,7 +9,6 @@ import (
 type Aggregate interface {
 	// ApplyEvent  applies the event to the aggrigate state
 	ApplyEvent(...Event)
-	StreamID() string
 
 	AggregateRootInterface
 }
@@ -28,14 +27,6 @@ func Append(a Aggregate, lis ...Event) {
 	a.ApplyEvent(lis...)
 }
 
-// CheckVersion returns an error if the version does not match.
-func CheckVersion(a Aggregate, version uint64) error {
-	if version != uint64(a.StreamVersion()) {
-		return fmt.Errorf("version wrong, got (proposed) %d != (expected) %d", version, a.StreamVersion())
-	}
-	return nil
-}
-
 // NotExists returns error if there are no events present.
 func NotExists(a Aggregate) error {
 	if a.StreamVersion() != 0 {
@@ -44,10 +35,22 @@ func NotExists(a Aggregate) error {
 	return nil
 }
 
+// ShouldExists returns error if there are no events present.
+func ShouldExist(a Aggregate) error {
+	if a.StreamVersion() == 0 {
+		return fmt.Errorf("%w, got version == %d", ErrShouldExist, a.StreamVersion())
+	}
+	return nil
+}
+
 type AggregateRootInterface interface {
-	// Events returns the aggrigate events
+	// Events returns the aggregate events
 	// pass true for only uncommitted events
 	Events(bool) Events
+	// StreamID returns aggregate stream ID
+	StreamID() string
+	// SetStreamID sets aggregate stream ID
+	SetStreamID(streamID string)
 	// StreamVersion returns last commit events
 	StreamVersion() uint64
 	// Version returns the current aggrigate version. (committed + uncommitted)
@@ -62,18 +65,17 @@ var _ AggregateRootInterface = &AggregateRoot{}
 
 type AggregateRoot struct {
 	events        Events
+	streamID      string
 	streamVersion uint64
 
 	mu sync.RWMutex
 }
 
-func (a *AggregateRoot) Commit() {
-	a.streamVersion = uint64(len(a.events))
-}
-
-func (a *AggregateRoot) StreamVersion() uint64 {
-	return a.streamVersion
-}
+func (a *AggregateRoot) Commit()                     { a.streamVersion = uint64(len(a.events)) }
+func (a *AggregateRoot) StreamID() string            { return a.streamID }
+func (a *AggregateRoot) SetStreamID(streamID string) { a.streamID = streamID }
+func (a *AggregateRoot) StreamVersion() uint64       { return a.streamVersion }
+func (a *AggregateRoot) Version() uint64             { return uint64(len(a.events)) }
 func (a *AggregateRoot) Events(new bool) Events {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -87,9 +89,6 @@ func (a *AggregateRoot) Events(new bool) Events {
 	copy(lis, events)
 
 	return lis
-}
-func (a *AggregateRoot) Version() uint64 {
-	return uint64(len(a.events))
 }
 
 //lint:ignore U1000 is called by embeded interface
@@ -122,3 +121,4 @@ func (a *AggregateRoot) posStartAt(lis ...Event) {
 }
 
 var ErrShouldNotExist = errors.New("should not exist")
+var ErrShouldExist = errors.New("should exist")

@@ -79,6 +79,8 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 		_, span := logz.Span(ctx)
 		defer span.End()
 
+		span.AddEvent(fmt.Sprintf(" %s %#v %d", m.streamID, stream, len(*stream)))
+
 		last := uint64(len(*stream))
 		if version != AppendOnly && version != last {
 			return fmt.Errorf("current version wrong %d != %d", version, last)
@@ -97,15 +99,17 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 }
 
 // Read implements driver.EventStore
-func (es *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Events, error) {
+func (m *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Events, error) {
 	ctx, span := logz.Span(ctx)
 	defer span.End()
 
 	var events event.Events
 
-	err := es.events.Modify(ctx, func(stream *event.Events) error {
+	err := m.events.Modify(ctx, func(stream *event.Events) error {
 		_, span := logz.Span(ctx)
 		defer span.End()
+
+		span.AddEvent(fmt.Sprintf(" %s %#v %d", m.streamID, stream, len(*stream)))
 
 		first := stream.First().EventMeta().Position
 		last := stream.Last().EventMeta().Position
@@ -118,7 +122,7 @@ func (es *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Eve
 		if count == 0 {
 			return nil
 		}
-
+		span.AddEvent(fmt.Sprint("box", first, last, pos, count))
 		events = make([]event.Event, math.Abs(count))
 		for i := range events {
 			span.AddEvent(fmt.Sprintf("read event %d of %d", i, math.Abs(count)))
@@ -143,7 +147,7 @@ func (es *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Eve
 		return nil, err
 	}
 
-	event.SetStreamID(es.streamID, events...)
+	event.SetStreamID(m.streamID, events...)
 
 	return events, nil
 }
@@ -164,4 +168,8 @@ func (m *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 
 	events, err := m.events.Copy(ctx)
 	return events.Last().EventMeta().Position, err
+}
+
+func (m *eventLog) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
+	panic("not implemented")
 }

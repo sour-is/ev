@@ -2,10 +2,14 @@ package gql_ev
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/keys-pub/keys"
 	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/pkg/domain"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/msgbus"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
@@ -144,4 +148,41 @@ func (r *Resolver) PostAdded(ctx context.Context, streamID string, after int64) 
 	}()
 
 	return ch, nil
+}
+
+func (r *Resolver) CreateSaltyUser(ctx context.Context, nick string, pub string) (*SaltyUser, error) {
+	streamID := fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
+
+	key, err := keys.NewEdX25519PublicKeyFromID(keys.ID(pub))
+	if err != nil {
+		return nil, err
+	}
+
+	a, err := es.Create(ctx, r.es, streamID, func(ctx context.Context, agg *domain.SaltyUser) error {
+		return agg.OnUserRegister(nick, key)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &SaltyUser{
+		Nick:   nick,
+		Pubkey: pub,
+		Inbox:  a.Inbox.String(),
+	}, err
+}
+
+func (r *Resolver) SaltyUser(ctx context.Context, nick string) (*SaltyUser, error) {
+	streamID := fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
+
+	a, err := es.Update(ctx, r.es, streamID, func(ctx context.Context, agg *domain.SaltyUser) error { return nil })
+	if err != nil {
+		return nil, err
+	}
+
+	return &SaltyUser{
+		Nick:   nick,
+		Pubkey: a.Pubkey.String(),
+		Inbox:  a.Inbox.String(),
+	}, err
 }

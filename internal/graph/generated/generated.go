@@ -40,6 +40,7 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	Mutation() MutationResolver
 	Query() QueryResolver
 	Subscription() SubscriptionResolver
 }
@@ -60,6 +61,10 @@ type ComplexityRoot struct {
 		StreamID   func(childComplexity int) int
 	}
 
+	Mutation struct {
+		CreateSaltyUser func(childComplexity int, nick string, pubkey string) int
+	}
+
 	PageInfo struct {
 		Begin func(childComplexity int) int
 		End   func(childComplexity int) int
@@ -77,7 +82,15 @@ type ComplexityRoot struct {
 
 	Query struct {
 		Posts              func(childComplexity int, streamID string, paging *gql_ev.PageInput) int
+		SaltyUser          func(childComplexity int, nick string) int
 		__resolve__service func(childComplexity int) int
+	}
+
+	SaltyUser struct {
+		Endpoint func(childComplexity int) int
+		Inbox    func(childComplexity int) int
+		Nick     func(childComplexity int) int
+		Pubkey   func(childComplexity int) int
 	}
 
 	Subscription struct {
@@ -89,8 +102,12 @@ type ComplexityRoot struct {
 	}
 }
 
+type MutationResolver interface {
+	CreateSaltyUser(ctx context.Context, nick string, pubkey string) (*gql_ev.SaltyUser, error)
+}
 type QueryResolver interface {
 	Posts(ctx context.Context, streamID string, paging *gql_ev.PageInput) (*gql_ev.Connection, error)
+	SaltyUser(ctx context.Context, nick string) (*gql_ev.SaltyUser, error)
 }
 type SubscriptionResolver interface {
 	PostAdded(ctx context.Context, streamID string, after int64) (<-chan *gql_ev.PostEvent, error)
@@ -152,6 +169,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Meta.StreamID(childComplexity), true
+
+	case "Mutation.createSaltyUser":
+		if e.complexity.Mutation.CreateSaltyUser == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createSaltyUser_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.CreateSaltyUser(childComplexity, args["nick"].(string), args["pubkey"].(string)), true
 
 	case "PageInfo.begin":
 		if e.complexity.PageInfo.Begin == nil {
@@ -228,12 +257,52 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Query.Posts(childComplexity, args["streamID"].(string), args["paging"].(*gql_ev.PageInput)), true
 
+	case "Query.saltyUser":
+		if e.complexity.Query.SaltyUser == nil {
+			break
+		}
+
+		args, err := ec.field_Query_saltyUser_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.SaltyUser(childComplexity, args["nick"].(string)), true
+
 	case "Query._service":
 		if e.complexity.Query.__resolve__service == nil {
 			break
 		}
 
 		return e.complexity.Query.__resolve__service(childComplexity), true
+
+	case "SaltyUser.endpoint":
+		if e.complexity.SaltyUser.Endpoint == nil {
+			break
+		}
+
+		return e.complexity.SaltyUser.Endpoint(childComplexity), true
+
+	case "SaltyUser.inbox":
+		if e.complexity.SaltyUser.Inbox == nil {
+			break
+		}
+
+		return e.complexity.SaltyUser.Inbox(childComplexity), true
+
+	case "SaltyUser.nick":
+		if e.complexity.SaltyUser.Nick == nil {
+			break
+		}
+
+		return e.complexity.SaltyUser.Nick(childComplexity), true
+
+	case "SaltyUser.pubkey":
+		if e.complexity.SaltyUser.Pubkey == nil {
+			break
+		}
+
+		return e.complexity.SaltyUser.Pubkey(childComplexity), true
 
 	case "Subscription.postAdded":
 		if e.complexity.Subscription.PostAdded == nil {
@@ -275,6 +344,21 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			first = false
 			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
 			data := ec._Query(ctx, rc.Operation.SelectionSet)
+			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Mutation:
+		return func(ctx context.Context) *graphql.Response {
+			if !first {
+				return nil
+			}
+			first = false
+			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
+			data := ec._Mutation(ctx, rc.Operation.SelectionSet)
 			var buf bytes.Buffer
 			data.MarshalGQL(&buf)
 
@@ -384,6 +468,20 @@ type PostEvent implements Edge {
 
     meta: Meta!
 }`, BuiltIn: false},
+	{Name: "../../../api/gql_ev/salty.graphqls", Input: `extend type Query {
+    saltyUser(nick: String!): SaltyUser
+}
+
+extend type Mutation {
+    createSaltyUser(nick: String! pubkey: String!): SaltyUser
+}
+
+type SaltyUser {
+    nick:     String!
+    pubkey:   String!
+    inbox:    String!
+    endpoint: String!
+}`, BuiltIn: false},
 	{Name: "../../../federation/directives.graphql", Input: `
 	scalar _Any
 	scalar _FieldSet
@@ -410,6 +508,30 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // endregion ************************** generated!.gotpl **************************
 
 // region    ***************************** args.gotpl *****************************
+
+func (ec *executionContext) field_Mutation_createSaltyUser_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["nick"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("nick"))
+		arg0, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["nick"] = arg0
+	var arg1 string
+	if tmp, ok := rawArgs["pubkey"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pubkey"))
+		arg1, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["pubkey"] = arg1
+	return args, nil
+}
 
 func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
@@ -447,6 +569,21 @@ func (ec *executionContext) field_Query_posts_args(ctx context.Context, rawArgs 
 		}
 	}
 	args["paging"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_saltyUser_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["nick"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("nick"))
+		arg0, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["nick"] = arg0
 	return args, nil
 }
 
@@ -782,6 +919,68 @@ func (ec *executionContext) fieldContext_Meta_position(ctx context.Context, fiel
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createSaltyUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_createSaltyUser(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().CreateSaltyUser(rctx, fc.Args["nick"].(string), fc.Args["pubkey"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*gql_ev.SaltyUser)
+	fc.Result = res
+	return ec.marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐSaltyUser(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createSaltyUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "nick":
+				return ec.fieldContext_SaltyUser_nick(ctx, field)
+			case "pubkey":
+				return ec.fieldContext_SaltyUser_pubkey(ctx, field)
+			case "inbox":
+				return ec.fieldContext_SaltyUser_inbox(ctx, field)
+			case "endpoint":
+				return ec.fieldContext_SaltyUser_endpoint(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SaltyUser", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createSaltyUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return
 	}
 	return fc, nil
 }
@@ -1253,6 +1452,68 @@ func (ec *executionContext) fieldContext_Query_posts(ctx context.Context, field 
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_saltyUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_saltyUser(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().SaltyUser(rctx, fc.Args["nick"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*gql_ev.SaltyUser)
+	fc.Result = res
+	return ec.marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐSaltyUser(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_saltyUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "nick":
+				return ec.fieldContext_SaltyUser_nick(ctx, field)
+			case "pubkey":
+				return ec.fieldContext_SaltyUser_pubkey(ctx, field)
+			case "inbox":
+				return ec.fieldContext_SaltyUser_inbox(ctx, field)
+			case "endpoint":
+				return ec.fieldContext_SaltyUser_endpoint(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SaltyUser", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_saltyUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query__service(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Query__service(ctx, field)
 	if err != nil {
@@ -1425,6 +1686,182 @@ func (ec *executionContext) fieldContext_Query___schema(ctx context.Context, fie
 				return ec.fieldContext___Schema_directives(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SaltyUser_nick(ctx context.Context, field graphql.CollectedField, obj *gql_ev.SaltyUser) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SaltyUser_nick(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Nick, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SaltyUser_nick(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SaltyUser",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SaltyUser_pubkey(ctx context.Context, field graphql.CollectedField, obj *gql_ev.SaltyUser) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SaltyUser_pubkey(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Pubkey, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SaltyUser_pubkey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SaltyUser",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SaltyUser_inbox(ctx context.Context, field graphql.CollectedField, obj *gql_ev.SaltyUser) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SaltyUser_inbox(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Inbox, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SaltyUser_inbox(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SaltyUser",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SaltyUser_endpoint(ctx context.Context, field graphql.CollectedField, obj *gql_ev.SaltyUser) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SaltyUser_endpoint(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Endpoint(ctx), nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SaltyUser_endpoint(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SaltyUser",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3473,6 +3910,42 @@ func (ec *executionContext) _Meta(ctx context.Context, sel ast.SelectionSet, obj
 	return out
 }
 
+var mutationImplementors = []string{"Mutation"}
+
+func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mutationImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Mutation",
+	})
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		innerCtx := graphql.WithRootFieldContext(ctx, &graphql.RootFieldContext{
+			Object: field.Name,
+			Field:  field,
+		})
+
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Mutation")
+		case "createSaltyUser":
+
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createSaltyUser(ctx, field)
+			})
+
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
 var pageInfoImplementors = []string{"PageInfo"}
 
 func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet, obj *gql_ev.PageInfo) graphql.Marshaler {
@@ -3633,6 +4106,26 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			out.Concurrently(i, func() graphql.Marshaler {
 				return rrm(innerCtx)
 			})
+		case "saltyUser":
+			field := field
+
+			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_saltyUser(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx, innerFunc)
+			}
+
+			out.Concurrently(i, func() graphql.Marshaler {
+				return rrm(innerCtx)
+			})
 		case "_service":
 			field := field
 
@@ -3668,6 +4161,68 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				return ec._Query___schema(ctx, field)
 			})
 
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
+var saltyUserImplementors = []string{"SaltyUser"}
+
+func (ec *executionContext) _SaltyUser(ctx context.Context, sel ast.SelectionSet, obj *gql_ev.SaltyUser) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, saltyUserImplementors)
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SaltyUser")
+		case "nick":
+
+			out.Values[i] = ec._SaltyUser_nick(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&invalids, 1)
+			}
+		case "pubkey":
+
+			out.Values[i] = ec._SaltyUser_pubkey(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&invalids, 1)
+			}
+		case "inbox":
+
+			out.Values[i] = ec._SaltyUser_inbox(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&invalids, 1)
+			}
+		case "endpoint":
+			field := field
+
+			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SaltyUser_endpoint(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&invalids, 1)
+				}
+				return res
+			}
+
+			out.Concurrently(i, func() graphql.Marshaler {
+				return innerFunc(ctx)
+
+			})
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -4600,6 +5155,13 @@ func (ec *executionContext) marshalOPostEvent2ᚖgithubᚗcomᚋsourᚑisᚋev�
 		return graphql.Null
 	}
 	return ec._PostEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐSaltyUser(ctx context.Context, sel ast.SelectionSet, v *gql_ev.SaltyUser) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SaltyUser(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOString2string(ctx context.Context, v interface{}) (string, error) {

@@ -169,6 +169,10 @@ func (w *wrapper) LastIndex(ctx context.Context) (uint64, error) {
 	return w.up.LastIndex(ctx)
 }
 
+func (w *wrapper) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
+	return w.up.LoadForUpdate(ctx, a, fn)
+}
+
 type position struct {
 	size int64
 	idx  int64

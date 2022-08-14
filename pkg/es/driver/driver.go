@@ -14,8 +14,10 @@ type Driver interface {
 type EventLog interface {
 	Read(ctx context.Context, pos, count int64) (event.Events, error)
 	Append(ctx context.Context, events event.Events, version uint64) (uint64, error)
-	FirstIndex(ctx context.Context) (uint64, error)
-	LastIndex(ctx context.Context) (uint64, error)
+	FirstIndex(context.Context) (uint64, error)
+	LastIndex(context.Context) (uint64, error)
+
+	LoadForUpdate(context.Context, event.Aggregate, func(context.Context, event.Aggregate) error) (uint64, error)
 }
 
 type Subscription interface {
