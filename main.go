@@ -49,6 +49,7 @@ func main() {
 	}
 }
 func run(ctx context.Context) error {
+	ctx, span := logz.Span(ctx)
 	diskstore.Init(ctx)
 	memstore.Init(ctx)
 	if err := domain.Init(ctx); err != nil {
@@ -97,6 +98,8 @@ func run(ctx context.Context) error {
 		defer cancel()
 		return s.Shutdown(ctx)
 	})
+
+	span.End()
 
 	return g.Wait()
 }
