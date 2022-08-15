@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding"
 	"fmt"
 	"log"
 	"strings"
@@ -60,7 +59,6 @@ type UserRegistered struct {
 }
 
 var _ event.Event = (*UserRegistered)(nil)
-var _ encoding.TextMarshaler = (*UserRegistered)(nil)
 
 func (e *UserRegistered) EventMeta() event.Meta {
 	if e == nil {
@@ -74,7 +72,7 @@ func (e *UserRegistered) SetEventMeta(m event.Meta) {
 		e.eventMeta = m
 	}
 }
-func (e *UserRegistered) MarshalText() (text []byte, err error) {
+func (e *UserRegistered) MarshalBinary() (text []byte, err error) {
 	var b bytes.Buffer
 	b.WriteString(e.Name)
 	b.WriteRune('\t')
@@ -82,7 +80,7 @@ func (e *UserRegistered) MarshalText() (text []byte, err error) {
 
 	return b.Bytes(), nil
 }
-func (e *UserRegistered) UnmarshalText(b []byte) error {
+func (e *UserRegistered) UnmarshalBinary(b []byte) error {
 	name, pub, ok := bytes.Cut(b, []byte{'\t'})
 	if !ok {
 		return fmt.Errorf("parse error")

@@ -171,7 +171,7 @@ func (es *eventLog) Append(ctx context.Context, events event.Events, version uin
 		for i, e := range events {
 			span.AddEvent(fmt.Sprintf("append event %d of %d", i, len(events)))
 
-			b, err = event.MarshalText(e)
+			b, err = event.MarshalBinary(e)
 			if err != nil {
 				span.RecordError(err)
 
@@ -231,7 +231,7 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 				span.RecordError(err)
 				return err
 			}
-			events[i], err = event.UnmarshalText(ctx, b, start)
+			events[i], err = event.UnmarshalBinary(ctx, b, start)
 			if err != nil {
 				span.RecordError(err)
 				return err

@@ -3,10 +3,8 @@ package event
 import (
 	"bytes"
 	"context"
-	"encoding"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/url"
 	"reflect"
 	"strings"
@@ -59,10 +57,10 @@ func (u UnknownEvent) EventType() string { return u.eventType }
 func (u *UnknownEvent) SetEventMeta(em Meta) {
 	u.eventMeta = em
 }
-func (u *UnknownEvent) UnmarshalText(b []byte) error {
+func (u *UnknownEvent) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, &u.values)
 }
-func (u *UnknownEvent) MarshalText() ([]byte, error) {
+func (u *UnknownEvent) MarshalBinary() ([]byte, error) {
 	return json.Marshal(u.values)
 }
 
@@ -119,14 +117,15 @@ func GetContainer(ctx context.Context, s string) Event {
 	return e
 }
 
-func MarshalText(e Event) (txt []byte, err error) {
+func MarshalBinary(e Event) (txt []byte, err error) {
 	b := &bytes.Buffer{}
 
-	if _, err = writeMarshaler(b, e.EventMeta().EventID); err != nil {
+	m := e.EventMeta()
+	if _, err = b.WriteString(m.EventID.String()); err != nil {
 		return nil, err
 	}
 	b.WriteRune('\t')
-	if _, err = b.WriteString(e.EventMeta().StreamID); err != nil {
+	if _, err = b.WriteString(m.StreamID); err != nil {
 		return nil, err
 	}
 	b.WriteRune('\t')
@@ -134,7 +133,7 @@ func MarshalText(e Event) (txt []byte, err error) {
 		return nil, err
 	}
 	b.WriteRune('\t')
-	if txt, err = e.MarshalText(); err != nil {
+	if txt, err = e.MarshalBinary(); err != nil {
 		return nil, err
 	}
 	_, err = b.Write(txt)
@@ -142,7 +141,7 @@ func MarshalText(e Event) (txt []byte, err error) {
 	return b.Bytes(), err
 }
 
-func UnmarshalText(ctx context.Context, txt []byte, pos uint64) (e Event, err error) {
+func UnmarshalBinary(ctx context.Context, txt []byte, pos uint64) (e Event, err error) {
 	sp := bytes.SplitN(txt, []byte{'\t'}, 4)
 	if len(sp) != 4 {
 		return nil, fmt.Errorf("invalid format. expected=4, got=%d", len(sp))
@@ -159,7 +158,7 @@ func UnmarshalText(ctx context.Context, txt []byte, pos uint64) (e Event, err er
 	eventType := string(sp[2])
 	e = GetContainer(ctx, eventType)
 
-	if err = e.UnmarshalText(sp[3]); err != nil {
+	if err = e.UnmarshalBinary(sp[3]); err != nil {
 		return nil, err
 	}
 
@@ -168,21 +167,13 @@ func UnmarshalText(ctx context.Context, txt []byte, pos uint64) (e Event, err er
 	return e, nil
 }
 
-func writeMarshaler(out io.Writer, in encoding.TextMarshaler) (int, error) {
-	if b, err := in.MarshalText(); err != nil {
-		return 0, err
-	} else {
-		return out.Write(b)
-	}
-}
-
 // DecodeEvents unmarshals the byte list into Events.
 func DecodeEvents(ctx context.Context, lis ...[]byte) (Events, error) {
 	elis := make([]Event, len(lis))
 
 	var err error
 	for i, txt := range lis {
-		elis[i], err = UnmarshalText(ctx, txt, uint64(i))
+		elis[i], err = UnmarshalBinary(ctx, txt, uint64(i))
 		if err != nil {
 			return nil, err
 		}
@@ -195,7 +186,7 @@ func EncodeEvents(events ...Event) (lis [][]byte, err error) {
 	lis = make([][]byte, len(events))
 
 	for i, txt := range events {
-		lis[i], err = MarshalText(txt)
+		lis[i], err = MarshalBinary(txt)
 		if err != nil {
 			return nil, err
 		}

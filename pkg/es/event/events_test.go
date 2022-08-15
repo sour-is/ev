@@ -29,10 +29,10 @@ func (e *DummyEvent) SetEventMeta(eventMeta event.Meta) {
 	}
 	e.eventMeta = eventMeta
 }
-func (e *DummyEvent) MarshalText() ([]byte, error) {
+func (e *DummyEvent) MarshalBinary() ([]byte, error) {
 	return json.Marshal(e)
 }
-func (e *DummyEvent) UnmarshalText(b []byte) error {
+func (e *DummyEvent) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, e)
 }
 

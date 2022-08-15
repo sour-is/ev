@@ -1,7 +1,6 @@
 package event
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding"
 	"encoding/json"
@@ -31,8 +30,8 @@ type Event interface {
 	EventMeta() Meta
 	SetEventMeta(Meta)
 
-	encoding.TextMarshaler
-	encoding.TextUnmarshaler
+	encoding.BinaryMarshaler
+	encoding.BinaryUnmarshaler
 }
 
 // Events is a list of events
@@ -74,17 +73,6 @@ func (lis Events) Last() Event {
 		return NilEvent
 	}
 	return lis[len(lis)-1]
-}
-func (lis Events) MarshalText() ([]byte, error) {
-	b := &bytes.Buffer{}
-	for i := range lis {
-		txt, err := MarshalText(lis[i])
-		if err != nil {
-			return nil, err
-		}
-		b.Write(txt)
-	}
-	return b.Bytes(), nil
 }
 
 func TypeOf(e Event) string {
@@ -150,9 +138,9 @@ func (*nilEvent) SetEventMeta(eventMeta Meta) {}
 
 var NilEvent = &nilEvent{}
 
-func (e *nilEvent) MarshalText() ([]byte, error) {
+func (e *nilEvent) MarshalBinary() ([]byte, error) {
 	return json.Marshal(e)
 }
-func (e *nilEvent) UnmarshalText(b []byte) error {
+func (e *nilEvent) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, e)
 }

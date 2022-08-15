@@ -51,10 +51,10 @@ func (e *ValueApplied) SetEventMeta(m event.Meta) {
 	}
 }
 
-func (e *ValueApplied) MarshalText() ([]byte, error) {
+func (e *ValueApplied) MarshalBinary() ([]byte, error) {
 	return json.Marshal(e)
 }
-func (e *ValueApplied) UnmarshalText(b []byte) error {
+func (e *ValueApplied) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, e)
 }
 
