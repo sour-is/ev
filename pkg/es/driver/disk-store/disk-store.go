@@ -111,13 +111,13 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 		Mdisk_evict: d.Mdisk_evict,
 	}, nil
 }
-func (ds *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
+func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
 	_, span := logz.Span(ctx)
 	defer span.End()
 
 	el := &eventLog{streamID: streamID}
 
-	return el, ds.openlogs.Modify(ctx, func(openlogs *openlogs) error {
+	return el, d.openlogs.Modify(ctx, func(openlogs *openlogs) error {
 		_, span := logz.Span(ctx)
 		defer span.End()
 
@@ -126,7 +126,7 @@ func (ds *diskStore) EventLog(ctx context.Context, streamID string) (driver.Even
 			return nil
 		}
 
-		l, err := wal.Open(filepath.Join(ds.path, streamID), wal.DefaultOptions)
+		l, err := wal.Open(filepath.Join(d.path, streamID), wal.DefaultOptions)
 		if err != nil {
 			span.RecordError(err)
 			return err
@@ -144,14 +144,14 @@ type eventLog struct {
 
 var _ driver.EventLog = (*eventLog)(nil)
 
-func (es *eventLog) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
+func (e *eventLog) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
 	_, span := logz.Span(ctx)
 	defer span.End()
 
-	event.SetStreamID(es.streamID, events...)
+	event.SetStreamID(e.streamID, events...)
 
 	var count uint64
-	err := es.events.Modify(ctx, func(l *wal.Log) error {
+	err := e.events.Modify(ctx, func(l *wal.Log) error {
 		_, span := logz.Span(ctx)
 		defer span.End()
 
@@ -162,7 +162,7 @@ func (es *eventLog) Append(ctx context.Context, events event.Events, version uin
 		}
 
 		if version != AppendOnly && version != last {
-			return fmt.Errorf("current version wrong %d != %d", version, last)
+			return fmt.Errorf("%w: current version wrong %d != %d", es.ErrWrongVersion, version, last)
 		}
 
 		var b []byte
@@ -189,13 +189,13 @@ func (es *eventLog) Append(ctx context.Context, events event.Events, version uin
 
 	return count, err
 }
-func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, error) {
+func (e *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, error) {
 	_, span := logz.Span(ctx)
 	defer span.End()
 
 	var events event.Events
 
-	err := es.events.Modify(ctx, func(stream *wal.Log) error {
+	err := e.events.Modify(ctx, func(stream *wal.Log) error {
 		_, span := logz.Span(ctx)
 		defer span.End()
 
@@ -255,38 +255,38 @@ func (es *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, e
 		return nil, err
 	}
 
-	event.SetStreamID(es.streamID, events...)
+	event.SetStreamID(e.streamID, events...)
 
 	return events, nil
 }
-func (es *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
+func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	_, span := logz.Span(ctx)
 	defer span.End()
 
 	var idx uint64
 	var err error
 
-	err = es.events.Modify(ctx, func(events *wal.Log) error {
+	err = e.events.Modify(ctx, func(events *wal.Log) error {
 		idx, err = events.FirstIndex()
 		return err
 	})
 
 	return idx, err
 }
-func (es *eventLog) LastIndex(ctx context.Context) (uint64, error) {
+func (e *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 	_, span := logz.Span(ctx)
 	defer span.End()
 
 	var idx uint64
 	var err error
 
-	err = es.events.Modify(ctx, func(events *wal.Log) error {
+	err = e.events.Modify(ctx, func(events *wal.Log) error {
 		idx, err = events.LastIndex()
 		return err
 	})
 
 	return idx, err
 }
-func (es *eventLog) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
+func (e *eventLog) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
 	panic("not implemented")
 }

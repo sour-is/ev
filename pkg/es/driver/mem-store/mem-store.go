@@ -83,7 +83,7 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 
 		last := uint64(len(*stream))
 		if version != AppendOnly && version != last {
-			return fmt.Errorf("current version wrong %d != %d", version, last)
+			return fmt.Errorf("%w: current version wrong %d != %d", es.ErrWrongVersion, version, last)
 		}
 
 		for i := range events {

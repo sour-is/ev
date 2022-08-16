@@ -3,6 +3,7 @@ package gql_ev
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -19,31 +20,40 @@ import (
 type Resolver struct {
 	es *es.EventStore
 
-	Mresolver_posts            syncint64.Counter
-	Mresolver_post_added       syncint64.Counter
-	Mresolver_post_added_event syncint64.Counter
+	Mresolver_posts             syncint64.Counter
+	Mresolver_post_added        syncint64.Counter
+	Mresolver_post_added_event  syncint64.Counter
+	Mresolver_create_salty_user syncint64.Counter
+	Mresolver_salty_user        syncint64.Counter
 }
 
-func New(es *es.EventStore) (*Resolver, error) {
-	m := logz.Meter(context.Background())
+func New(ctx context.Context, es *es.EventStore) (*Resolver, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
 
-	var errs error
+	m := logz.Meter(ctx)
 
-	Mresolver_posts, err := m.SyncInt64().Counter("resolver_posts")
+	var err, errs error
+
+	r := &Resolver{es: es}
+
+	r.Mresolver_posts, err = m.SyncInt64().Counter("resolver_posts")
 	errs = multierr.Append(errs, err)
 
-	Mresolver_post_added, err := m.SyncInt64().Counter("resolver_post_added")
+	r.Mresolver_post_added, err = m.SyncInt64().Counter("resolver_post_added")
 	errs = multierr.Append(errs, err)
 
-	Mresolver_post_added_event, err := m.SyncInt64().Counter("resolver_post_added")
+	r.Mresolver_post_added_event, err = m.SyncInt64().Counter("resolver_post_added")
 	errs = multierr.Append(errs, err)
 
-	return &Resolver{
-		es,
-		Mresolver_posts,
-		Mresolver_post_added,
-		Mresolver_post_added_event,
-	}, errs
+	r.Mresolver_create_salty_user, err = m.SyncInt64().Counter("resolver_create_salty_user")
+	errs = multierr.Append(errs, err)
+
+	r.Mresolver_salty_user, err = m.SyncInt64().Counter("resolver_salty_user")
+	errs = multierr.Append(errs, err)
+
+	span.RecordError(err)
+	return r, errs
 }
 
 // Posts is the resolver for the events field.
@@ -55,6 +65,7 @@ func (r *Resolver) Posts(ctx context.Context, streamID string, paging *PageInput
 
 	lis, err := r.es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
@@ -79,9 +90,11 @@ func (r *Resolver) Posts(ctx context.Context, streamID string, paging *PageInput
 
 	var first, last uint64
 	if first, err = r.es.FirstIndex(ctx, streamID); err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 	if last, err = r.es.LastIndex(ctx, streamID); err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
@@ -109,23 +122,30 @@ func (r *Resolver) PostAdded(ctx context.Context, streamID string, after int64) 
 
 	sub, err := es.Subscribe(ctx, streamID, after)
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
 	ch := make(chan *PostEvent)
 
 	go func() {
+		ctx, span := logz.Span(ctx)
+		defer span.End()
+
 		defer func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
-			sub.Close(ctx)
+			err := sub.Close(ctx)
+			span.RecordError(err)
 		}()
 
 		for sub.Recv(ctx) {
 			events, err := sub.Events(ctx)
 			if err != nil {
+				span.RecordError(err)
 				break
 			}
+			span.AddEvent(fmt.Sprintf("received %d events", len(events)))
 			r.Mresolver_post_added_event.Add(ctx, int64(len(events)))
 
 			for _, e := range events {
@@ -151,33 +171,58 @@ func (r *Resolver) PostAdded(ctx context.Context, streamID string, after int64) 
 }
 
 func (r *Resolver) CreateSaltyUser(ctx context.Context, nick string, pub string) (*SaltyUser, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	r.Mresolver_create_salty_user.Add(ctx, 1)
+
 	streamID := fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
+	span.AddEvent(streamID)
 
 	key, err := keys.NewEdX25519PublicKeyFromID(keys.ID(pub))
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
 	a, err := es.Create(ctx, r.es, streamID, func(ctx context.Context, agg *domain.SaltyUser) error {
 		return agg.OnUserRegister(nick, key)
 	})
-	if err != nil {
-		return nil, err
+	switch {
+	case errors.Is(err, es.ErrShouldNotExist):
+		span.RecordError(err)
+		return nil, fmt.Errorf("user exists")
+
+	case err != nil:
+		span.RecordError(err)
+		return nil, fmt.Errorf("internal error")
 	}
 
 	return &SaltyUser{
 		Nick:   nick,
 		Pubkey: pub,
 		Inbox:  a.Inbox.String(),
-	}, err
+	}, nil
 }
 
 func (r *Resolver) SaltyUser(ctx context.Context, nick string) (*SaltyUser, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	r.Mresolver_salty_user.Add(ctx, 1)
+
 	streamID := fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
+	span.AddEvent(streamID)
 
 	a, err := es.Update(ctx, r.es, streamID, func(ctx context.Context, agg *domain.SaltyUser) error { return nil })
-	if err != nil {
-		return nil, err
+	switch {
+	case errors.Is(err, es.ErrShouldExist):
+		span.RecordError(err)
+		return nil, fmt.Errorf("user not found")
+
+	case err != nil:
+		span.RecordError(err)
+		return nil, fmt.Errorf("%w internal error", err)
 	}
 
 	return &SaltyUser{

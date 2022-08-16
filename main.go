@@ -49,58 +49,68 @@ func main() {
 	}
 }
 func run(ctx context.Context) error {
-	ctx, span := logz.Span(ctx)
-	diskstore.Init(ctx)
-	memstore.Init(ctx)
-	if err := domain.Init(ctx); err != nil {
-		return err
-	}
-
-	es, err := es.Open(ctx, env("EV_DATA", "file:data"), streamer.New(ctx))
-	if err != nil {
-		return err
-	}
-
-	svc, err := msgbus.New(ctx, es, env("EV_BASE_URL", "https://ev.sour.is/inbox/"))
-	if err != nil {
-		return err
-	}
-
-	r, err := gql_ev.New(es)
-	if err != nil {
-		return err
-	}
-	res := graph.New(r)
-	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: res}))
-	gql.Use(otelgqlgen.Middleware())
-
-	s := http.Server{
-		Addr: env("EV_HTTP", ":8080"),
-	}
-	mux := http.NewServeMux()
-
-	mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
-	mux.Handle("/gql", logz.Htrace(res.ChainMiddlewares(gql), "gql"))
-	mux.Handle("/inbox/", logz.Htrace(http.StripPrefix("/inbox/", svc), "inbox"))
-	mux.Handle("/.well-known/salty/", logz.Htrace(svc, "lookup"))
-	mux.Handle("/metrics", logz.PromHTTP(ctx))
-
-	s.Handler = cors.AllowAll().Handler(mux)
-
-	log.Print("Listen on ", s.Addr)
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(s.ListenAndServe)
+	{
+		ctx, span := logz.Span(ctx)
 
-	g.Go(func() error {
-		<-ctx.Done()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return s.Shutdown(ctx)
-	})
+		diskstore.Init(ctx)
+		memstore.Init(ctx)
+		if err := domain.Init(ctx); err != nil {
+			span.RecordError(err)
+			return err
+		}
 
-	span.End()
+		es, err := es.Open(ctx, env("EV_DATA", "file:data"), streamer.New(ctx))
+		if err != nil {
+			span.RecordError(err)
+			return err
+		}
 
+		svc, err := msgbus.New(ctx, es, env("EV_BASE_URL", "https://ev.sour.is/inbox/"))
+		if err != nil {
+			span.RecordError(err)
+			return err
+		}
+
+		r, err := gql_ev.New(ctx, es)
+		if err != nil {
+			span.RecordError(err)
+			return err
+		}
+		res := graph.New(r)
+		gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: res}))
+		gql.Use(otelgqlgen.Middleware())
+
+		s := http.Server{
+			Addr: env("EV_HTTP", ":8080"),
+		}
+
+		mux := http.NewServeMux()
+
+		mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
+		mux.Handle("/gql", logz.Htrace(res.ChainMiddlewares(gql), "gql"))
+		mux.Handle("/metrics", logz.PromHTTP(ctx))
+
+		mux.Handle("/inbox/", logz.Htrace(http.StripPrefix("/inbox/", svc), "inbox"))
+		mux.Handle("/.well-known/salty/", logz.Htrace(svc, "lookup"))
+
+		s.Handler = cors.AllowAll().Handler(mux)
+
+		log.Print("Listen on ", s.Addr)
+		span.AddEvent("begin listen and serve")
+
+		g.Go(s.ListenAndServe)
+
+		g.Go(func() error {
+			<-ctx.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return s.Shutdown(ctx)
+		})
+
+		span.End()
+	}
 	return g.Wait()
 }
 func env(name, defaultValue string) string {

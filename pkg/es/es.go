@@ -216,6 +216,9 @@ func Unwrap[T any](t T) T {
 }
 
 var ErrNoDriver = errors.New("no driver")
+var ErrWrongVersion = errors.New("wrong version")
+var ErrShouldExist = event.ErrShouldExist
+var ErrShouldNotExist = event.ErrShouldNotExist
 
 type PA[T any] interface {
 	event.Aggregate
