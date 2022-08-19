@@ -9,16 +9,12 @@ import (
 	"path"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/ravilushqa/otelgqlgen"
 	"github.com/rs/cors"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/sour-is/ev/api/gql_ev"
+	"github.com/sour-is/ev/app/gql"
 	"github.com/sour-is/ev/app/msgbus"
-	"github.com/sour-is/ev/app/playground"
 	"github.com/sour-is/ev/app/salty"
-	"github.com/sour-is/ev/internal/graph/generated"
 	"github.com/sour-is/ev/internal/logz"
 	"github.com/sour-is/ev/pkg/es"
 	diskstore "github.com/sour-is/ev/pkg/es/driver/disk-store"
@@ -37,12 +33,6 @@ func main() {
 
 	ctx, stop := logz.Init(ctx, AppName)
 	defer stop()
-
-	Mup, err := logz.Meter(ctx).SyncInt64().UpDownCounter("up")
-	if err != nil {
-		log.Fatal(err)
-	}
-	Mup.Add(ctx, 1)
 
 	if err := run(ctx); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
@@ -67,40 +57,34 @@ func run(ctx context.Context) error {
 			Addr: env("EV_HTTP", ":8080"),
 		}
 
-		saltySVC, err := salty.New(ctx, es, path.Join(env("EV_BASE_URL", "http://localhost" + s.Addr), "inbox"))
+		salty, err := salty.New(ctx, es, path.Join(env("EV_BASE_URL", "http://localhost"+s.Addr), "inbox"))
 		if err != nil {
 			span.RecordError(err)
 			return err
 		}
 
-		msgbusSVC, err := msgbus.New(ctx, es)
+		msgbus, err := msgbus.New(ctx, es)
 		if err != nil {
 			span.RecordError(err)
 			return err
 		}
 
-		res, err := gql_ev.New(ctx, msgbusSVC, saltySVC)
+		gql, err := gql.New(ctx, msgbus, salty)
 		if err != nil {
 			span.RecordError(err)
 			return err
 		}
-		gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: res}))
-		gql.Use(otelgqlgen.Middleware())
 
-
-		mux := http.NewServeMux()
-
-		mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
-		mux.Handle("/gql", logz.Htrace(res.ChainMiddlewares(gql), "gql"))
-		mux.Handle("/metrics", logz.PromHTTP(ctx))
-
-		mux.Handle("/inbox/", logz.Htrace(http.StripPrefix("/inbox/", msgbusSVC), "inbox"))
-		mux.Handle("/.well-known/salty/", logz.Htrace(saltySVC, "lookup"))
-
-		s.Handler = cors.AllowAll().Handler(mux)
+		s.Handler = httpMux(logz.NewHTTP(ctx), msgbus, salty, gql)
 
 		log.Print("Listen on ", s.Addr)
 		span.AddEvent("begin listen and serve")
+
+		Mup, err := logz.Meter(ctx).SyncInt64().UpDownCounter("up")
+		if err != nil {
+			return err
+		}
+		Mup.Add(ctx, 1)
 
 		g.Go(s.ListenAndServe)
 
@@ -113,7 +97,11 @@ func run(ctx context.Context) error {
 
 		span.End()
 	}
-	return g.Wait()
+
+	if err := g.Wait(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 func env(name, defaultValue string) string {
 	if v := os.Getenv(name); v != "" {
@@ -121,4 +109,11 @@ func env(name, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+func httpMux(fns ...interface{ RegisterHTTP(*http.ServeMux) }) http.Handler {
+	mux := http.NewServeMux()
+	for _, fn := range fns {
+		fn.RegisterHTTP(mux)
+	}
+	return cors.AllowAll().Handler(mux)
 }

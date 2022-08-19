@@ -69,6 +69,9 @@ func (s *service) BaseURL() string {
 	}
 	return s.baseURL
 }
+func(s *service) RegisterHTTP(mux *http.ServeMux) {
+	mux.Handle("/.well-known/salty/", logz.Htrace(s, "lookup"))
+}
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx, span := logz.Span(ctx)

@@ -70,6 +70,9 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+func (s *service) RegisterHTTP(mux *http.ServeMux) {
+	mux.Handle("/inbox/", logz.Htrace(http.StripPrefix("/inbox/", s), "inbox"))
+}
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx, span := logz.Span(ctx)

@@ -31,11 +31,9 @@ func Meter(ctx context.Context) metric.Meter {
 	}
 	return global.Meter("")
 }
-func PromHTTP(ctx context.Context) http.Handler {
-	if t := fromContext[contextKey, *prometheus.Exporter](ctx, promHTTPKey); t != nil {
-		return t
-	}
-	return http.NotFoundHandler()
+func NewHTTP(ctx context.Context) *httpHandle {
+	t := fromContext[contextKey, *prometheus.Exporter](ctx, promHTTPKey)
+	return &httpHandle{t}
 }
 
 func initMetrics(ctx context.Context, name string) (context.Context, func() error) {
@@ -87,4 +85,15 @@ func initMetrics(ctx context.Context, name string) (context.Context, func() erro
 		defer log.Println("metrics stopped")
 		return cont.Stop(ctx)
 	}
+}
+
+type httpHandle struct {
+	exp *prometheus.Exporter
+}
+
+func (h *httpHandle) RegisterHTTP(mux *http.ServeMux) {
+	if h.exp == nil {
+		return
+	}
+	mux.Handle("/metrics", h.exp)
 }
