@@ -16,8 +16,10 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
 	"github.com/99designs/gqlgen/plugin/federation/fedruntime"
-	"github.com/sour-is/ev/api/gql_ev"
+	"github.com/sour-is/ev/app/msgbus"
+	"github.com/sour-is/ev/app/salty"
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/gql"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
@@ -81,7 +83,7 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Posts              func(childComplexity int, streamID string, paging *gql_ev.PageInput) int
+		Posts              func(childComplexity int, streamID string, paging *gql.PageInput) int
 		SaltyUser          func(childComplexity int, nick string) int
 		__resolve__service func(childComplexity int) int
 	}
@@ -103,14 +105,14 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
-	CreateSaltyUser(ctx context.Context, nick string, pubkey string) (*gql_ev.SaltyUser, error)
+	CreateSaltyUser(ctx context.Context, nick string, pubkey string) (*salty.SaltyUser, error)
 }
 type QueryResolver interface {
-	Posts(ctx context.Context, streamID string, paging *gql_ev.PageInput) (*gql_ev.Connection, error)
-	SaltyUser(ctx context.Context, nick string) (*gql_ev.SaltyUser, error)
+	Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error)
+	SaltyUser(ctx context.Context, nick string) (*salty.SaltyUser, error)
 }
 type SubscriptionResolver interface {
-	PostAdded(ctx context.Context, streamID string, after int64) (<-chan *gql_ev.PostEvent, error)
+	PostAdded(ctx context.Context, streamID string, after int64) (<-chan *msgbus.PostEvent, error)
 }
 
 type executableSchema struct {
@@ -255,7 +257,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Query.Posts(childComplexity, args["streamID"].(string), args["paging"].(*gql_ev.PageInput)), true
+		return e.complexity.Query.Posts(childComplexity, args["streamID"].(string), args["paging"].(*gql.PageInput)), true
 
 	case "Query.saltyUser":
 		if e.complexity.Query.SaltyUser == nil {
@@ -409,33 +411,33 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 }
 
 var sources = []*ast.Source{
-	{Name: "../../../api/gql_ev/common.graphqls", Input: `scalar Time
+	{Name: "../../../pkg/es/es.graphqls", Input: `
+type Meta @goModel(model: "github.com/sour-is/ev/pkg/es/event.Meta") {
+    eventID: String! @goField(name: "getEventID")
+    streamID: String!
+    created: Time!
+    position: Int!
+}`, BuiltIn: false},
+	{Name: "../../../pkg/gql/common.graphqls", Input: `scalar Time
 scalar Map
 
-type Connection {
+type Connection @goModel(model: "github.com/sour-is/ev/pkg/gql.Connection") {
     paging: PageInfo!
     edges: [Edge!]!
 }
-input PageInput {
+input PageInput  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInput") {
     idx: Int = 0
     count: Int = 30
 }
-type PageInfo {
+type PageInfo  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInfo") {
     next: Boolean!
     prev: Boolean!
 
     begin: Int!
     end:   Int!
 }
-interface Edge {
+interface Edge @goModel(model: "github.com/sour-is/ev/pkg/gql.Edge"){
     id: ID!
-}
-
-type Meta {
-    eventID: String! @goField(name: "getEventID")
-    streamID: String!
-    created: Time!
-    position: Int!
 }
 
 directive @goModel(
@@ -452,14 +454,14 @@ directive @goTag(
 	key: String!
 	value: String
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION`, BuiltIn: false},
-	{Name: "../../../api/gql_ev/msgbus.graphqls", Input: `extend type Query {
+	{Name: "../../../app/msgbus/msgbus.graphqls", Input: `extend type Query {
     posts(streamID: String! paging: PageInput): Connection!
 }
 extend type Subscription {
     """after == 0 start from begining, after == -1 start from end"""
     postAdded(streamID: String! after: Int! = -1): PostEvent
 }
-type PostEvent implements Edge {
+type PostEvent implements Edge @goModel(model: "github.com/sour-is/ev/app/msgbus.PostEvent") {
     id: ID!
 
     payload: String!
@@ -468,7 +470,7 @@ type PostEvent implements Edge {
 
     meta: Meta!
 }`, BuiltIn: false},
-	{Name: "../../../api/gql_ev/salty.graphqls", Input: `extend type Query {
+	{Name: "../../../app/salty/salty.graphqls", Input: `extend type Query {
     saltyUser(nick: String!): SaltyUser
 }
 
@@ -476,7 +478,7 @@ extend type Mutation {
     createSaltyUser(nick: String! pubkey: String!): SaltyUser
 }
 
-type SaltyUser {
+type SaltyUser @goModel(model: "github.com/sour-is/ev/app/salty.SaltyUser"){
     nick:     String!
     pubkey:   String!
     inbox:    String!
@@ -560,10 +562,10 @@ func (ec *executionContext) field_Query_posts_args(ctx context.Context, rawArgs 
 		}
 	}
 	args["streamID"] = arg0
-	var arg1 *gql_ev.PageInput
+	var arg1 *gql.PageInput
 	if tmp, ok := rawArgs["paging"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("paging"))
-		arg1, err = ec.unmarshalOPageInput2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐPageInput(ctx, tmp)
+		arg1, err = ec.unmarshalOPageInput2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐPageInput(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -649,7 +651,7 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 
 // region    **************************** field.gotpl *****************************
 
-func (ec *executionContext) _Connection_paging(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Connection) (ret graphql.Marshaler) {
+func (ec *executionContext) _Connection_paging(ctx context.Context, field graphql.CollectedField, obj *gql.Connection) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Connection_paging(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -675,9 +677,9 @@ func (ec *executionContext) _Connection_paging(ctx context.Context, field graphq
 		}
 		return graphql.Null
 	}
-	res := resTmp.(*gql_ev.PageInfo)
+	res := resTmp.(*gql.PageInfo)
 	fc.Result = res
-	return ec.marshalNPageInfo2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐPageInfo(ctx, field.Selections, res)
+	return ec.marshalNPageInfo2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐPageInfo(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Connection_paging(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -703,7 +705,7 @@ func (ec *executionContext) fieldContext_Connection_paging(ctx context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _Connection_edges(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Connection) (ret graphql.Marshaler) {
+func (ec *executionContext) _Connection_edges(ctx context.Context, field graphql.CollectedField, obj *gql.Connection) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Connection_edges(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -729,9 +731,9 @@ func (ec *executionContext) _Connection_edges(ctx context.Context, field graphql
 		}
 		return graphql.Null
 	}
-	res := resTmp.([]gql_ev.Edge)
+	res := resTmp.([]gql.Edge)
 	fc.Result = res
-	return ec.marshalNEdge2ᚕgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐEdgeᚄ(ctx, field.Selections, res)
+	return ec.marshalNEdge2ᚕgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐEdgeᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Connection_edges(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -946,9 +948,9 @@ func (ec *executionContext) _Mutation_createSaltyUser(ctx context.Context, field
 	if resTmp == nil {
 		return graphql.Null
 	}
-	res := resTmp.(*gql_ev.SaltyUser)
+	res := resTmp.(*salty.SaltyUser)
 	fc.Result = res
-	return ec.marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐSaltyUser(ctx, field.Selections, res)
+	return ec.marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋappᚋsaltyᚐSaltyUser(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_createSaltyUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -985,7 +987,7 @@ func (ec *executionContext) fieldContext_Mutation_createSaltyUser(ctx context.Co
 	return fc, nil
 }
 
-func (ec *executionContext) _PageInfo_next(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PageInfo) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_next(ctx context.Context, field graphql.CollectedField, obj *gql.PageInfo) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PageInfo_next(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1029,7 +1031,7 @@ func (ec *executionContext) fieldContext_PageInfo_next(ctx context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _PageInfo_prev(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PageInfo) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_prev(ctx context.Context, field graphql.CollectedField, obj *gql.PageInfo) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PageInfo_prev(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1073,7 +1075,7 @@ func (ec *executionContext) fieldContext_PageInfo_prev(ctx context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _PageInfo_begin(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PageInfo) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_begin(ctx context.Context, field graphql.CollectedField, obj *gql.PageInfo) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PageInfo_begin(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1117,7 +1119,7 @@ func (ec *executionContext) fieldContext_PageInfo_begin(ctx context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _PageInfo_end(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PageInfo) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_end(ctx context.Context, field graphql.CollectedField, obj *gql.PageInfo) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PageInfo_end(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1161,7 +1163,7 @@ func (ec *executionContext) fieldContext_PageInfo_end(ctx context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _PostEvent_id(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PostEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _PostEvent_id(ctx context.Context, field graphql.CollectedField, obj *msgbus.PostEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PostEvent_id(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1175,7 +1177,7 @@ func (ec *executionContext) _PostEvent_id(ctx context.Context, field graphql.Col
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.ID, nil
+		return obj.ID(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1196,7 +1198,7 @@ func (ec *executionContext) fieldContext_PostEvent_id(ctx context.Context, field
 	fc = &graphql.FieldContext{
 		Object:     "PostEvent",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
@@ -1205,7 +1207,7 @@ func (ec *executionContext) fieldContext_PostEvent_id(ctx context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _PostEvent_payload(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PostEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _PostEvent_payload(ctx context.Context, field graphql.CollectedField, obj *msgbus.PostEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PostEvent_payload(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1219,7 +1221,7 @@ func (ec *executionContext) _PostEvent_payload(ctx context.Context, field graphq
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Payload, nil
+		return obj.Payload(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1240,7 +1242,7 @@ func (ec *executionContext) fieldContext_PostEvent_payload(ctx context.Context, 
 	fc = &graphql.FieldContext{
 		Object:     "PostEvent",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
@@ -1249,7 +1251,7 @@ func (ec *executionContext) fieldContext_PostEvent_payload(ctx context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _PostEvent_payloadJSON(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PostEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _PostEvent_payloadJSON(ctx context.Context, field graphql.CollectedField, obj *msgbus.PostEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PostEvent_payloadJSON(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1293,7 +1295,7 @@ func (ec *executionContext) fieldContext_PostEvent_payloadJSON(ctx context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _PostEvent_tags(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PostEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _PostEvent_tags(ctx context.Context, field graphql.CollectedField, obj *msgbus.PostEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PostEvent_tags(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1307,7 +1309,7 @@ func (ec *executionContext) _PostEvent_tags(ctx context.Context, field graphql.C
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Tags, nil
+		return obj.Tags(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1328,7 +1330,7 @@ func (ec *executionContext) fieldContext_PostEvent_tags(ctx context.Context, fie
 	fc = &graphql.FieldContext{
 		Object:     "PostEvent",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
@@ -1337,7 +1339,7 @@ func (ec *executionContext) fieldContext_PostEvent_tags(ctx context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _PostEvent_meta(ctx context.Context, field graphql.CollectedField, obj *gql_ev.PostEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _PostEvent_meta(ctx context.Context, field graphql.CollectedField, obj *msgbus.PostEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_PostEvent_meta(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1351,7 +1353,7 @@ func (ec *executionContext) _PostEvent_meta(ctx context.Context, field graphql.C
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Meta, nil
+		return obj.Meta(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1372,7 +1374,7 @@ func (ec *executionContext) fieldContext_PostEvent_meta(ctx context.Context, fie
 	fc = &graphql.FieldContext{
 		Object:     "PostEvent",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
@@ -1405,7 +1407,7 @@ func (ec *executionContext) _Query_posts(ctx context.Context, field graphql.Coll
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Posts(rctx, fc.Args["streamID"].(string), fc.Args["paging"].(*gql_ev.PageInput))
+		return ec.resolvers.Query().Posts(rctx, fc.Args["streamID"].(string), fc.Args["paging"].(*gql.PageInput))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1417,9 +1419,9 @@ func (ec *executionContext) _Query_posts(ctx context.Context, field graphql.Coll
 		}
 		return graphql.Null
 	}
-	res := resTmp.(*gql_ev.Connection)
+	res := resTmp.(*gql.Connection)
 	fc.Result = res
-	return ec.marshalNConnection2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐConnection(ctx, field.Selections, res)
+	return ec.marshalNConnection2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐConnection(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_posts(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1475,9 +1477,9 @@ func (ec *executionContext) _Query_saltyUser(ctx context.Context, field graphql.
 	if resTmp == nil {
 		return graphql.Null
 	}
-	res := resTmp.(*gql_ev.SaltyUser)
+	res := resTmp.(*salty.SaltyUser)
 	fc.Result = res
-	return ec.marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐSaltyUser(ctx, field.Selections, res)
+	return ec.marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋappᚋsaltyᚐSaltyUser(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_saltyUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1691,7 +1693,7 @@ func (ec *executionContext) fieldContext_Query___schema(ctx context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _SaltyUser_nick(ctx context.Context, field graphql.CollectedField, obj *gql_ev.SaltyUser) (ret graphql.Marshaler) {
+func (ec *executionContext) _SaltyUser_nick(ctx context.Context, field graphql.CollectedField, obj *salty.SaltyUser) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_SaltyUser_nick(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1705,7 +1707,7 @@ func (ec *executionContext) _SaltyUser_nick(ctx context.Context, field graphql.C
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Nick, nil
+		return obj.Nick(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1726,7 +1728,7 @@ func (ec *executionContext) fieldContext_SaltyUser_nick(ctx context.Context, fie
 	fc = &graphql.FieldContext{
 		Object:     "SaltyUser",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
@@ -1735,7 +1737,7 @@ func (ec *executionContext) fieldContext_SaltyUser_nick(ctx context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _SaltyUser_pubkey(ctx context.Context, field graphql.CollectedField, obj *gql_ev.SaltyUser) (ret graphql.Marshaler) {
+func (ec *executionContext) _SaltyUser_pubkey(ctx context.Context, field graphql.CollectedField, obj *salty.SaltyUser) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_SaltyUser_pubkey(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1749,7 +1751,7 @@ func (ec *executionContext) _SaltyUser_pubkey(ctx context.Context, field graphql
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Pubkey, nil
+		return obj.Pubkey(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1770,7 +1772,7 @@ func (ec *executionContext) fieldContext_SaltyUser_pubkey(ctx context.Context, f
 	fc = &graphql.FieldContext{
 		Object:     "SaltyUser",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
@@ -1779,7 +1781,7 @@ func (ec *executionContext) fieldContext_SaltyUser_pubkey(ctx context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _SaltyUser_inbox(ctx context.Context, field graphql.CollectedField, obj *gql_ev.SaltyUser) (ret graphql.Marshaler) {
+func (ec *executionContext) _SaltyUser_inbox(ctx context.Context, field graphql.CollectedField, obj *salty.SaltyUser) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_SaltyUser_inbox(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1793,7 +1795,7 @@ func (ec *executionContext) _SaltyUser_inbox(ctx context.Context, field graphql.
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Inbox, nil
+		return obj.Inbox(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1814,7 +1816,7 @@ func (ec *executionContext) fieldContext_SaltyUser_inbox(ctx context.Context, fi
 	fc = &graphql.FieldContext{
 		Object:     "SaltyUser",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
@@ -1823,7 +1825,7 @@ func (ec *executionContext) fieldContext_SaltyUser_inbox(ctx context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _SaltyUser_endpoint(ctx context.Context, field graphql.CollectedField, obj *gql_ev.SaltyUser) (ret graphql.Marshaler) {
+func (ec *executionContext) _SaltyUser_endpoint(ctx context.Context, field graphql.CollectedField, obj *salty.SaltyUser) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_SaltyUser_endpoint(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1892,7 +1894,7 @@ func (ec *executionContext) _Subscription_postAdded(ctx context.Context, field g
 	}
 	return func(ctx context.Context) graphql.Marshaler {
 		select {
-		case res, ok := <-resTmp.(<-chan *gql_ev.PostEvent):
+		case res, ok := <-resTmp.(<-chan *msgbus.PostEvent):
 			if !ok {
 				return nil
 			}
@@ -1900,7 +1902,7 @@ func (ec *executionContext) _Subscription_postAdded(ctx context.Context, field g
 				w.Write([]byte{'{'})
 				graphql.MarshalString(field.Alias).MarshalGQL(w)
 				w.Write([]byte{':'})
-				ec.marshalOPostEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐPostEvent(ctx, field.Selections, res).MarshalGQL(w)
+				ec.marshalOPostEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋappᚋmsgbusᚐPostEvent(ctx, field.Selections, res).MarshalGQL(w)
 				w.Write([]byte{'}'})
 			})
 		case <-ctx.Done():
@@ -3759,8 +3761,8 @@ func (ec *executionContext) fieldContext___Type_specifiedByURL(ctx context.Conte
 
 // region    **************************** input.gotpl *****************************
 
-func (ec *executionContext) unmarshalInputPageInput(ctx context.Context, obj interface{}) (gql_ev.PageInput, error) {
-	var it gql_ev.PageInput
+func (ec *executionContext) unmarshalInputPageInput(ctx context.Context, obj interface{}) (gql.PageInput, error) {
+	var it gql.PageInput
 	asMap := map[string]interface{}{}
 	for k, v := range obj.(map[string]interface{}) {
 		asMap[k] = v
@@ -3806,13 +3808,11 @@ func (ec *executionContext) unmarshalInputPageInput(ctx context.Context, obj int
 
 // region    ************************** interface.gotpl ***************************
 
-func (ec *executionContext) _Edge(ctx context.Context, sel ast.SelectionSet, obj gql_ev.Edge) graphql.Marshaler {
+func (ec *executionContext) _Edge(ctx context.Context, sel ast.SelectionSet, obj gql.Edge) graphql.Marshaler {
 	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
-	case gql_ev.PostEvent:
-		return ec._PostEvent(ctx, sel, &obj)
-	case *gql_ev.PostEvent:
+	case *msgbus.PostEvent:
 		if obj == nil {
 			return graphql.Null
 		}
@@ -3828,7 +3828,7 @@ func (ec *executionContext) _Edge(ctx context.Context, sel ast.SelectionSet, obj
 
 var connectionImplementors = []string{"Connection"}
 
-func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSet, obj *gql_ev.Connection) graphql.Marshaler {
+func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSet, obj *gql.Connection) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, connectionImplementors)
 	out := graphql.NewFieldSet(fields)
 	var invalids uint32
@@ -3948,7 +3948,7 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 
 var pageInfoImplementors = []string{"PageInfo"}
 
-func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet, obj *gql_ev.PageInfo) graphql.Marshaler {
+func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet, obj *gql.PageInfo) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, pageInfoImplementors)
 	out := graphql.NewFieldSet(fields)
 	var invalids uint32
@@ -3997,7 +3997,7 @@ func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet,
 
 var postEventImplementors = []string{"PostEvent", "Edge"}
 
-func (ec *executionContext) _PostEvent(ctx context.Context, sel ast.SelectionSet, obj *gql_ev.PostEvent) graphql.Marshaler {
+func (ec *executionContext) _PostEvent(ctx context.Context, sel ast.SelectionSet, obj *msgbus.PostEvent) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, postEventImplementors)
 	out := graphql.NewFieldSet(fields)
 	var invalids uint32
@@ -4174,7 +4174,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 
 var saltyUserImplementors = []string{"SaltyUser"}
 
-func (ec *executionContext) _SaltyUser(ctx context.Context, sel ast.SelectionSet, obj *gql_ev.SaltyUser) graphql.Marshaler {
+func (ec *executionContext) _SaltyUser(ctx context.Context, sel ast.SelectionSet, obj *salty.SaltyUser) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, saltyUserImplementors)
 	out := graphql.NewFieldSet(fields)
 	var invalids uint32
@@ -4612,11 +4612,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) marshalNConnection2githubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐConnection(ctx context.Context, sel ast.SelectionSet, v gql_ev.Connection) graphql.Marshaler {
+func (ec *executionContext) marshalNConnection2githubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐConnection(ctx context.Context, sel ast.SelectionSet, v gql.Connection) graphql.Marshaler {
 	return ec._Connection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNConnection2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐConnection(ctx context.Context, sel ast.SelectionSet, v *gql_ev.Connection) graphql.Marshaler {
+func (ec *executionContext) marshalNConnection2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐConnection(ctx context.Context, sel ast.SelectionSet, v *gql.Connection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -4626,7 +4626,7 @@ func (ec *executionContext) marshalNConnection2ᚖgithubᚗcomᚋsourᚑisᚋev�
 	return ec._Connection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNEdge2githubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐEdge(ctx context.Context, sel ast.SelectionSet, v gql_ev.Edge) graphql.Marshaler {
+func (ec *executionContext) marshalNEdge2githubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐEdge(ctx context.Context, sel ast.SelectionSet, v gql.Edge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -4636,7 +4636,7 @@ func (ec *executionContext) marshalNEdge2githubᚗcomᚋsourᚑisᚋevᚋapiᚋg
 	return ec._Edge(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNEdge2ᚕgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []gql_ev.Edge) graphql.Marshaler {
+func (ec *executionContext) marshalNEdge2ᚕgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []gql.Edge) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -4660,7 +4660,7 @@ func (ec *executionContext) marshalNEdge2ᚕgithubᚗcomᚋsourᚑisᚋevᚋapi�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNEdge2githubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNEdge2githubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -4756,7 +4756,7 @@ func (ec *executionContext) marshalNMeta2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkg�
 	return ec._Meta(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *gql_ev.PageInfo) graphql.Marshaler {
+func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *gql.PageInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -5142,7 +5142,7 @@ func (ec *executionContext) marshalOInt2ᚖint64(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) unmarshalOPageInput2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐPageInput(ctx context.Context, v interface{}) (*gql_ev.PageInput, error) {
+func (ec *executionContext) unmarshalOPageInput2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋgqlᚐPageInput(ctx context.Context, v interface{}) (*gql.PageInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -5150,14 +5150,14 @@ func (ec *executionContext) unmarshalOPageInput2ᚖgithubᚗcomᚋsourᚑisᚋev
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOPostEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐPostEvent(ctx context.Context, sel ast.SelectionSet, v *gql_ev.PostEvent) graphql.Marshaler {
+func (ec *executionContext) marshalOPostEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋappᚋmsgbusᚐPostEvent(ctx context.Context, sel ast.SelectionSet, v *msgbus.PostEvent) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._PostEvent(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋapiᚋgql_evᚐSaltyUser(ctx context.Context, sel ast.SelectionSet, v *gql_ev.SaltyUser) graphql.Marshaler {
+func (ec *executionContext) marshalOSaltyUser2ᚖgithubᚗcomᚋsourᚑisᚋevᚋappᚋsaltyᚐSaltyUser(ctx context.Context, sel ast.SelectionSet, v *salty.SaltyUser) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

@@ -1,0 +1,7 @@
+
+type Meta @goModel(model: "github.com/sour-is/ev/pkg/es/event.Meta") {
+    eventID: String! @goField(name: "getEventID")
+    streamID: String!
+    created: Time!
+    position: Int!
+}

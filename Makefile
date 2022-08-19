@@ -4,17 +4,24 @@ export EV_HTTP=:8080
 export EV_TRACE_SAMPLE=always
 -include local.mk
 
-run: gen
+air: gen
 ifeq (, $(shell which air))
 	go install github.com/cosmtrek/air@latest
 endif
 	air
+
+run:
+	go run .
+
 test:
 	go test -cover -race ./...
 
 
-GQLDIR=api/gql_ev
-GQLS=$(wildcard $(GQLDIR)/*.go) $(wildcard $(GQLDIR)/*.graphqls) gqlgen.yml
+GQLS=gqlgen.yml
+GQLS:=$(GQLS) $(wildcard api/gql_ev/*.go)
+GQLS:=$(GQLS) $(wildcard pkg/*/*.graphqls)
+GQLS:=$(GQLS) $(wildcard app/*/*.graphqls)
+GQLS:=$(GQLS) $(wildcard app/*/*.go)
 GQLSRC=internal/graph/generated/generated.go
 
 gen: gql

@@ -215,7 +215,6 @@ func (e *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, er
 		}
 
 		start, count := math.PagerBox(first, last, pos, count)
-		span.AddEvent(fmt.Sprint("reading", first, last, pos, count, start))
 		if count == 0 {
 			return nil
 		}

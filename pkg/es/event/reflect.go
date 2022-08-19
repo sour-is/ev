@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/sour-is/ev/internal/logz"
 	"github.com/sour-is/ev/pkg/locker"
 )
 
@@ -66,41 +67,72 @@ func (u *UnknownEvent) MarshalBinary() ([]byte, error) {
 
 // Register a type container for Unmarshalling values into. The type must implement Event and not be a nil value.
 func Register(ctx context.Context, lis ...Event) error {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	for _, e := range lis {
 		if err := ctx.Err(); err != nil {
+			span.RecordError(err)
 			return err
 		}
-		if e == nil {
-			return fmt.Errorf("can't register event.Event of type=%T with value=%v", e, e)
-		}
-
-		value := reflect.ValueOf(e)
-
-		if value.IsNil() {
-			return fmt.Errorf("can't register event.Event of type=%T with value=%v", e, e)
-		}
-
-		value = reflect.Indirect(value)
-
 		name := TypeOf(e)
-		typ := value.Type()
-
-		if err := eventTypes.Modify(ctx, func(c *config) error {
-			c.eventTypes[name] = typ
-			return nil
-		}); err != nil {
+		err := RegisterName(ctx, name, e)
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
+func RegisterName(ctx context.Context, name string, e Event) error {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
+	if e == nil {
+		err := fmt.Errorf("can't register event.Event of type=%T with value=%v", e, e)
+		span.RecordError(err)
+		return err
+	}
+
+	value := reflect.ValueOf(e)
+
+	if value.IsNil() {
+		err := fmt.Errorf("can't register event.Event of type=%T with value=%v", e, e)
+		span.RecordError(err)
+		return err
+	}
+	value = reflect.Indirect(value)
+
+	typ := value.Type()
+
+	span.AddEvent("register: " + name)
+
+	if err := eventTypes.Modify(ctx, func(c *config) error {
+		_, span := logz.Span(ctx)
+		defer span.End()
+
+		c.eventTypes[name] = typ
+		return nil
+	}); err != nil {
+		span.RecordError(err)
+		return err
+	}
+	return nil
+}
 func GetContainer(ctx context.Context, s string) Event {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	var e Event
 
 	eventTypes.Modify(ctx, func(c *config) error {
+		_, span := logz.Span(ctx)
+		defer span.End()
+
 		typ, ok := c.eventTypes[s]
 		if !ok {
-			return fmt.Errorf("not defined")
+			err := fmt.Errorf("not defined: %s", s)
+			span.RecordError(err)
+			return err
 		}
 		newType := reflect.New(typ)
 		newInterface := newType.Interface()
@@ -108,7 +140,9 @@ func GetContainer(ctx context.Context, s string) Event {
 			e = iface
 			return nil
 		}
-		return fmt.Errorf("failed")
+		err := fmt.Errorf("failed")
+		span.RecordError(err)
+		return err
 	})
 	if e == nil {
 		e = &UnknownEvent{eventType: s}
@@ -142,13 +176,19 @@ func MarshalBinary(e Event) (txt []byte, err error) {
 }
 
 func UnmarshalBinary(ctx context.Context, txt []byte, pos uint64) (e Event, err error) {
+	_, span := logz.Span(ctx)
+	defer span.End()
+
 	sp := bytes.SplitN(txt, []byte{'\t'}, 4)
 	if len(sp) != 4 {
-		return nil, fmt.Errorf("invalid format. expected=4, got=%d", len(sp))
+		err = fmt.Errorf("invalid format. expected=4, got=%d", len(sp))
+		span.RecordError(err)
+		return nil, err
 	}
 
 	m := Meta{}
 	if err = m.EventID.UnmarshalText(sp[0]); err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
@@ -157,8 +197,10 @@ func UnmarshalBinary(ctx context.Context, txt []byte, pos uint64) (e Event, err 
 
 	eventType := string(sp[2])
 	e = GetContainer(ctx, eventType)
+	span.AddEvent(fmt.Sprintf("%s == %T", eventType, e))
 
 	if err = e.UnmarshalBinary(sp[3]); err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 

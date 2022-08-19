@@ -4,35 +4,63 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/sour-is/ev/internal/logz"
-	"github.com/sour-is/ev/pkg/domain"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/gql"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.uber.org/multierr"
 )
 
 type service struct {
-	baseURL string
-	es      *es.EventStore
+	es *es.EventStore
+
+	Mresolver_posts            syncint64.Counter
+	Mresolver_post_added       syncint64.Counter
+	Mresolver_post_added_event syncint64.Counter
 }
 
-func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, error) {
+type MsgbusResolver interface {
+	Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error)
+	PostAdded(ctx context.Context, streamID string, after int64) (<-chan *PostEvent, error)
+}
+
+func New(ctx context.Context, es *es.EventStore) (*service, error) {
 	ctx, span := logz.Span(ctx)
 	defer span.End()
 
 	if err := event.Register(ctx, &PostEvent{}); err != nil {
 		return nil, err
 	}
-	return &service{baseURL, es}, nil
+	if err := event.RegisterName(ctx, "domain.PostEvent", &PostEvent{}); err != nil {
+		return nil, err
+	}
+
+	m := logz.Meter(ctx)
+
+	svc := &service{es: es}
+
+	var err, errs error
+	svc.Mresolver_posts, err = m.SyncInt64().Counter("resolver_posts")
+	errs = multierr.Append(errs, err)
+
+	svc.Mresolver_post_added, err = m.SyncInt64().Counter("resolver_post_added")
+	errs = multierr.Append(errs, err)
+
+	svc.Mresolver_post_added_event, err = m.SyncInt64().Counter("resolver_post_added")
+	errs = multierr.Append(errs, err)
+
+	span.RecordError(err)
+
+	return svc, errs
 }
 
 var upgrader = websocket.Upgrader{
@@ -54,10 +82,6 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.websocket(w, r)
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/.well-known/salty") {
-			s.getUser(w, r)
-			return
-		}
 
 		s.get(w, r)
 	case http.MethodPost, http.MethodPut:
@@ -65,6 +89,108 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+// Posts is the resolver for the events field.
+func (r *service) Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	r.Mresolver_posts.Add(ctx, 1)
+
+	lis, err := r.es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	edges := make([]gql.Edge, 0, len(lis))
+	for i := range lis {
+		span.AddEvent(fmt.Sprint("post ", i, " of ", len(lis)))
+		e := lis[i]
+
+		post, ok := e.(*PostEvent)
+		if !ok {
+			continue
+		}
+
+		edges = append(edges, post)
+	}
+
+	var first, last uint64
+	if first, err = r.es.FirstIndex(ctx, streamID); err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+	if last, err = r.es.LastIndex(ctx, streamID); err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	return &gql.Connection{
+		Paging: &gql.PageInfo{
+			Next:  lis.Last().EventMeta().Position < last,
+			Prev:  lis.First().EventMeta().Position > first,
+			Begin: lis.First().EventMeta().Position,
+			End:   lis.Last().EventMeta().Position,
+		},
+		Edges: edges,
+	}, nil
+}
+
+func (r *service) PostAdded(ctx context.Context, streamID string, after int64) (<-chan *PostEvent, error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	r.Mresolver_post_added.Add(ctx, 1)
+
+	es := r.es.EventStream()
+	if es == nil {
+		return nil, fmt.Errorf("EventStore does not implement streaming")
+	}
+
+	sub, err := es.Subscribe(ctx, streamID, after)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	ch := make(chan *PostEvent)
+
+	go func() {
+		ctx, span := logz.Span(ctx)
+		defer span.End()
+
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			err := sub.Close(ctx)
+			span.RecordError(err)
+		}()
+
+		for sub.Recv(ctx) {
+			events, err := sub.Events(ctx)
+			if err != nil {
+				span.RecordError(err)
+				break
+			}
+			span.AddEvent(fmt.Sprintf("received %d events", len(events)))
+			r.Mresolver_post_added_event.Add(ctx, int64(len(events)))
+
+			for _, e := range events {
+				if p, ok := e.(*PostEvent); ok {
+					select {
+					case ch <- p:
+						continue
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return ch, nil
 }
 
 func (s *service) get(w http.ResponseWriter, r *http.Request) {
@@ -120,41 +246,6 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, events[i])
 	}
 }
-func (s *service) getUser(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	ctx, span := logz.Span(ctx)
-	defer span.End()
-
-	addr := "saltyuser-" + strings.TrimPrefix(r.URL.Path, "/.well-known/salty/")
-	addr = strings.TrimSuffix(addr, ".json")
-
-	span.AddEvent(fmt.Sprint("find ", addr))
-	a, err := es.Update(ctx, s.es, addr, func(ctx context.Context, agg *domain.SaltyUser) error { return nil })
-	switch {
-	case errors.Is(err, event.ErrShouldExist):
-		span.RecordError(err)
-
-		w.WriteHeader(http.StatusNotFound)
-		return
-	case err != nil:
-		span.RecordError(err)
-
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(
-		struct {
-			Endpoint string `json:"endpoint"`
-			Key      string `json:"key"`
-		}{
-			Endpoint: path.Join(s.baseURL, a.Inbox.String()),
-			Key:      a.Pubkey.ID().String(),
-		})
-	if err != nil {
-		span.RecordError(err)
-	}
-}
 func (s *service) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -187,8 +278,8 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	events := event.NewEvents(&PostEvent{
-		Payload: b,
-		Tags:    fields(tags),
+		payload: b,
+		tags:    fields(tags),
 	})
 
 	_, err = s.es.Append(ctx, "post-"+name, events)
@@ -322,8 +413,8 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 }
 
 type PostEvent struct {
-	Payload []byte
-	Tags    []string
+	payload []byte
+	tags    []string
 
 	eventMeta event.Meta
 }
@@ -341,11 +432,38 @@ func (e *PostEvent) SetEventMeta(eventMeta event.Meta) {
 	e.eventMeta = eventMeta
 }
 func (e *PostEvent) MarshalBinary() ([]byte, error) {
-	return json.Marshal(e)
+	j := struct {
+		Payload []byte
+		Tags    []string
+	}{
+		Payload: e.payload,
+		Tags:    e.tags,
+	}
+	return json.Marshal(&j)
 }
 func (e *PostEvent) UnmarshalBinary(b []byte) error {
-	return json.Unmarshal(b, e)
+	j := struct {
+		Payload []byte
+		Tags    []string
+	}{}
+	err := json.Unmarshal(b, &j)
+	e.payload = j.Payload
+	e.tags = j.Tags
+
+	return err
 }
+func (e *PostEvent) MarshalJSON() ([]byte, error) { return e.MarshalBinary() }
+func (e *PostEvent) UnmarshalJSON(b []byte) error { return e.UnmarshalBinary(b) }
+
+func (e *PostEvent) ID() string      { return e.eventMeta.GetEventID() }
+func (e *PostEvent) Tags() []string  { return e.tags }
+func (e *PostEvent) Payload() string { return string(e.payload) }
+func (e *PostEvent) PayloadJSON(ctx context.Context) (m map[string]interface{}, err error) {
+	err = json.Unmarshal([]byte(e.payload), &m)
+	return
+}
+func (e *PostEvent) Meta() *event.Meta { return &e.eventMeta }
+func (e *PostEvent) IsEdge()           {}
 
 func (e *PostEvent) String() string {
 	var b bytes.Buffer
@@ -357,14 +475,15 @@ func (e *PostEvent) String() string {
 
 	b.WriteString(e.eventMeta.EventID.String())
 	b.WriteRune('\t')
-	b.WriteString(string(e.Payload))
-	if len(e.Tags) > 0 {
+	b.WriteString(string(e.payload))
+	if len(e.tags) > 0 {
 		b.WriteRune('\t')
-		b.WriteString(strings.Join(e.Tags, ","))
+		b.WriteString(strings.Join(e.tags, ","))
 	}
 
 	return b.String()
 }
+
 func fields(s string) []string {
 	if s == "" {
 		return nil
@@ -393,8 +512,8 @@ func encodeJSON(w io.Writer, first event.Event, events ...event.Event) error {
 		}
 		out[i].ID = e.EventMeta().Position
 		out[i].Created = e.EventMeta().Created().Format(time.RFC3339Nano)
-		out[i].Payload = e.Payload
-		out[i].Tags = e.Tags
+		out[i].Payload = e.payload
+		out[i].Tags = e.tags
 		out[i].Topic.Name = strings.TrimPrefix(e.EventMeta().StreamID, "post-")
 		out[i].Topic.Created = first.EventMeta().Created().Format(time.RFC3339Nano)
 		out[i].Topic.Seq = e.EventMeta().Position

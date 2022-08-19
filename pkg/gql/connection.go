@@ -1,4 +1,4 @@
-package gql_ev
+package gql
 
 import (
 	"context"
@@ -53,14 +53,4 @@ func (p *PageInput) GetCount(v int64) int64 {
 		return v
 	}
 	return *p.Count
-}
-
-type SaltyUser struct {
-	Nick   string `json:"nick"`
-	Pubkey string `json:"pubkey"`
-	Inbox  string `json:"inbox"`
-}
-
-func (s SaltyUser) Endpoint(ctx context.Context) string {
-	return "https://ev.sour.is/inbox/" + s.Inbox
 }

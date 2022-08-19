@@ -1,30 +1,23 @@
 scalar Time
 scalar Map
 
-type Connection {
+type Connection @goModel(model: "github.com/sour-is/ev/pkg/gql.Connection") {
     paging: PageInfo!
     edges: [Edge!]!
 }
-input PageInput {
+input PageInput  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInput") {
     idx: Int = 0
     count: Int = 30
 }
-type PageInfo {
+type PageInfo  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInfo") {
     next: Boolean!
     prev: Boolean!
 
     begin: Int!
     end:   Int!
 }
-interface Edge {
+interface Edge @goModel(model: "github.com/sour-is/ev/pkg/gql.Edge"){
     id: ID!
-}
-
-type Meta {
-    eventID: String! @goField(name: "getEventID")
-    streamID: String!
-    created: Time!
-    position: Int!
 }
 
 directive @goModel(

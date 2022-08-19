@@ -1,4 +1,4 @@
-package domain
+package salty
 
 import (
 	"bytes"
@@ -6,21 +6,19 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"path"
 	"strings"
 
 	"github.com/keys-pub/keys"
 	"github.com/oklog/ulid/v2"
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/gql"
 )
 
-func Init(ctx context.Context) error {
-	return event.Register(ctx, &UserRegistered{})
-}
-
 type SaltyUser struct {
-	Name   string
-	Pubkey *keys.EdX25519PublicKey
-	Inbox  ulid.ULID
+	name   string
+	pubkey *keys.EdX25519PublicKey
+	inbox  ulid.ULID
 
 	event.AggregateRoot
 }
@@ -32,9 +30,9 @@ func (a *SaltyUser) ApplyEvent(lis ...event.Event) {
 	for _, e := range lis {
 		switch e := e.(type) {
 		case *UserRegistered:
-			a.Name = e.Name
-			a.Pubkey = e.Pubkey
-			a.Inbox = e.EventMeta().EventID
+			a.name = e.Name
+			a.pubkey = e.Pubkey
+			a.inbox = e.EventMeta().EventID
 			a.SetStreamID(a.streamID())
 		default:
 			log.Printf("unknown event %T", e)
@@ -43,12 +41,20 @@ func (a *SaltyUser) ApplyEvent(lis ...event.Event) {
 }
 
 func (a *SaltyUser) streamID() string {
-	return fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(a.Name))))
+	return fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(a.name))))
 }
 
 func (a *SaltyUser) OnUserRegister(name string, pubkey *keys.EdX25519PublicKey) error {
 	event.Raise(a, &UserRegistered{Name: name, Pubkey: pubkey})
 	return nil
+}
+
+func (a *SaltyUser) Nick() string   { return a.name }
+func (a *SaltyUser) Inbox() string  { return a.inbox.String() }
+func (a *SaltyUser) Pubkey() string { return a.pubkey.String() }
+func (s *SaltyUser) Endpoint(ctx context.Context) string {
+	svc := gql.FromContext[contextKey, *service](ctx, saltyKey)
+	return path.Join(svc.BaseURL(), s.inbox.String())
 }
 
 type UserRegistered struct {
@@ -66,7 +72,6 @@ func (e *UserRegistered) EventMeta() event.Meta {
 	}
 	return e.eventMeta
 }
-
 func (e *UserRegistered) SetEventMeta(m event.Meta) {
 	if e != nil {
 		e.eventMeta = m
