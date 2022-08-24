@@ -71,9 +71,13 @@ func initTracing(ctx context.Context, name string) (context.Context, func() erro
 		return ctx, nil
 	}
 
+	exporterAddr := env("EV_TRACE_ENDPOINT", "")
+	if exporterAddr == "" {
+		return ctx, nil
+	}
 	traceExporter, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithInsecure(),
-		otlptracehttp.WithEndpoint("localhost:4318"),
+		otlptracehttp.WithEndpoint(exporterAddr),
 	)
 	if err != nil {
 		log.Println(wrap(err, "failed to create trace exporter"))

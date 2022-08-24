@@ -5,3 +5,19 @@ type Meta @goModel(model: "github.com/sour-is/ev/pkg/es/event.Meta") {
     created: Time!
     position: Int!
 }
+
+extend type Query {
+    events(streamID: String! paging: PageInput): Connection!
+}
+extend type Subscription {
+    """after == 0 start from begining, after == -1 start from end"""
+    eventAdded(streamID: String! after: Int! = -1): Event
+}
+
+type Event implements Edge {
+    id: ID!
+
+    eventID: String!
+    values: Map!
+    eventMeta: Meta!
+}

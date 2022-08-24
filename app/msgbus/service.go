@@ -31,6 +31,7 @@ type service struct {
 type MsgbusResolver interface {
 	Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error)
 	PostAdded(ctx context.Context, streamID string, after int64) (<-chan *PostEvent, error)
+	RegisterHTTP(mux *http.ServeMux)
 }
 
 func New(ctx context.Context, es *es.EventStore) (*service, error) {

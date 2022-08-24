@@ -35,6 +35,7 @@ var saltyKey = contextKey{"salty"}
 type SaltyResolver interface {
 	CreateSaltyUser(ctx context.Context, nick string, pub string) (*SaltyUser, error)
 	SaltyUser(ctx context.Context, nick string) (*SaltyUser, error)
+	RegisterHTTP(mux *http.ServeMux)
 }
 
 func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, error) {
@@ -69,7 +70,7 @@ func (s *service) BaseURL() string {
 	}
 	return s.baseURL
 }
-func(s *service) RegisterHTTP(mux *http.ServeMux) {
+func (s *service) RegisterHTTP(mux *http.ServeMux) {
 	mux.Handle("/.well-known/salty/", logz.Htrace(s, "lookup"))
 }
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {

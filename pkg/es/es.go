@@ -224,6 +224,10 @@ type PA[T any] interface {
 	event.Aggregate
 	*T
 }
+type PE[T any] interface {
+	event.Event
+	*T
+}
 
 // Create uses fn to create a new aggregate and store in db.
 func Create[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string, fn func(context.Context, T) error) (agg T, err error) {
@@ -272,6 +276,33 @@ func Update[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 	}
 
 	if err = fn(ctx, agg); err != nil {
+		return
+	}
+
+	if _, err = es.Save(ctx, agg); err != nil {
+		return
+	}
+
+	return
+}
+
+// Update uses fn to update an exsisting aggregate and store in db.
+func Upsert[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string, fn func(context.Context, T) error) (agg T, err error) {
+	ctx, span := logz.Span(ctx)
+	defer span.End()
+
+	agg = new(A)
+	agg.SetStreamID(streamID)
+
+	if err = es.Load(ctx, agg); err != nil {
+		return
+	}
+
+	if err = fn(ctx, agg); err != nil {
+		return
+	}
+
+	if err = event.ShouldExist(agg); err != nil {
 		return
 	}
 

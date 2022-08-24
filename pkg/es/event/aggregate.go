@@ -29,16 +29,16 @@ func Append(a Aggregate, lis ...Event) {
 
 // NotExists returns error if there are no events present.
 func NotExists(a Aggregate) error {
-	if a.StreamVersion() != 0 {
-		return fmt.Errorf("%w, got version == %d", ErrShouldNotExist, a.StreamVersion())
+	if a.Version() != 0 {
+		return fmt.Errorf("%w, got version == %d", ErrShouldNotExist, a.Version())
 	}
 	return nil
 }
 
 // ShouldExists returns error if there are no events present.
 func ShouldExist(a Aggregate) error {
-	if a.StreamVersion() == 0 {
-		return fmt.Errorf("%w, got version == %d", ErrShouldExist, a.StreamVersion())
+	if a.Version() == 0 {
+		return fmt.Errorf("%w, got version == %d", ErrShouldExist, a.Version())
 	}
 	return nil
 }

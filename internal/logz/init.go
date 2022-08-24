@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 
 	"go.uber.org/multierr"
 )
@@ -34,9 +35,34 @@ func Init(ctx context.Context, name string) (context.Context, func() error) {
 }
 
 func env(name, defaultValue string) string {
-	if v := os.Getenv(name); v != "" {
-		log.Println("# ", name, " = ", v)
+	name = strings.TrimSpace(name)
+	defaultValue = strings.TrimSpace(defaultValue)
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		log.Println("# ", name, "=", v)
 		return v
 	}
+	log.Println("# ", name, "=", defaultValue, "(default)")
 	return defaultValue
+}
+
+type secret string
+
+func (s secret) String() string {
+	if s == "" {
+		return "(nil)"
+	}
+	return "***"
+}
+func (s secret) Secret() string {
+	return string(s)
+}
+func envSecret(name, defaultValue string) secret {
+	name = strings.TrimSpace(name)
+	defaultValue = strings.TrimSpace(defaultValue)
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		log.Println("# ", name, "=", secret(v))
+		return secret(v)
+	}
+	log.Println("# ", name, "=", secret(defaultValue), "(default)")
+	return secret(defaultValue)
 }

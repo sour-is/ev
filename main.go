@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/rs/cors"
@@ -14,6 +17,7 @@ import (
 
 	"github.com/sour-is/ev/app/gql"
 	"github.com/sour-is/ev/app/msgbus"
+	"github.com/sour-is/ev/app/peerfinder"
 	"github.com/sour-is/ev/app/salty"
 	"github.com/sour-is/ev/internal/logz"
 	"github.com/sour-is/ev/pkg/es"
@@ -57,25 +61,55 @@ func run(ctx context.Context) error {
 			Addr: env("EV_HTTP", ":8080"),
 		}
 
-		salty, err := salty.New(ctx, es, path.Join(env("EV_BASE_URL", "http://localhost"+s.Addr), "inbox"))
-		if err != nil {
-			span.RecordError(err)
-			return err
+		if strings.HasPrefix(s.Addr, ":") {
+			s.Addr = "[::]" + s.Addr
 		}
 
-		msgbus, err := msgbus.New(ctx, es)
-		if err != nil {
-			span.RecordError(err)
-			return err
+		enable := set(strings.Fields(env("EV_ENABLE", "salty msgbus gql peers"))...)
+		var svcs []interface{ RegisterHTTP(*http.ServeMux) }
+
+		if enable.Has("salty") {
+			span.AddEvent("Enable Salty")
+			salty, err := salty.New(ctx, es, path.Join(env("EV_BASE_URL", "http://"+s.Addr), "inbox"))
+			if err != nil {
+				span.RecordError(err)
+				return err
+			}
+			svcs = append(svcs, salty)
 		}
 
-		gql, err := gql.New(ctx, msgbus, salty)
-		if err != nil {
-			span.RecordError(err)
-			return err
+		if enable.Has("msgbus") {
+			span.AddEvent("Enable Msgbus")
+			msgbus, err := msgbus.New(ctx, es)
+			if err != nil {
+				span.RecordError(err)
+				return err
+			}
+			svcs = append(svcs, msgbus)
 		}
 
-		s.Handler = httpMux(logz.NewHTTP(ctx), msgbus, salty, gql)
+		if enable.Has("peers") {
+			span.AddEvent("Enable Peers")
+			peers, err := peerfinder.New(ctx, es)
+			if err != nil {
+				span.RecordError(err)
+				return err
+			}
+			svcs = append(svcs, peers)
+		}
+
+		if enable.Has("gql") {
+			span.AddEvent("Enable GraphQL")
+			gql, err := gql.New(ctx, svcs...)
+			if err != nil {
+				span.RecordError(err)
+				return err
+			}
+			svcs = append(svcs, gql)
+		}
+		svcs = append(svcs, logz.NewHTTP(ctx))
+
+		s.Handler = httpMux(svcs...)
 
 		log.Print("Listen on ", s.Addr)
 		span.AddEvent("begin listen and serve")
@@ -104,10 +138,13 @@ func run(ctx context.Context) error {
 	return nil
 }
 func env(name, defaultValue string) string {
-	if v := os.Getenv(name); v != "" {
-		log.Println("# ", name, " = ", v)
+	name = strings.TrimSpace(name)
+	defaultValue = strings.TrimSpace(defaultValue)
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		log.Println("#", name, "=", v)
 		return v
 	}
+	log.Println("#", name, "=", defaultValue, "(default)")
 	return defaultValue
 }
 func httpMux(fns ...interface{ RegisterHTTP(*http.ServeMux) }) http.Handler {
@@ -116,4 +153,33 @@ func httpMux(fns ...interface{ RegisterHTTP(*http.ServeMux) }) http.Handler {
 		fn.RegisterHTTP(mux)
 	}
 	return cors.AllowAll().Handler(mux)
+}
+
+type Set[T comparable] map[T]struct{}
+
+func set[T comparable](items ...T) Set[T] {
+	s := make(map[T]struct{}, len(items))
+	for i := range items {
+		s[items[i]] = struct{}{}
+	}
+	return s
+}
+func (s Set[T]) Has(v T) bool {
+	_, ok := (s)[v]
+	return ok
+}
+func (s Set[T]) String() string {
+	if s == nil {
+		return "set(<nil>)"
+	}
+	lis := make([]string, 0, len(s))
+	for k := range s {
+		lis = append(lis, fmt.Sprint(k))
+	}
+
+	var b bytes.Buffer
+	b.WriteString("set(")
+	b.WriteString(strings.Join(lis, ","))
+	b.WriteString(")")
+	return b.String()
 }
