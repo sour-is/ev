@@ -18,7 +18,7 @@ import (
 	"github.com/99designs/gqlgen/plugin/federation/fedruntime"
 	"github.com/sour-is/ev/app/msgbus"
 	"github.com/sour-is/ev/app/salty"
-	"github.com/sour-is/ev/internal/graph/model"
+	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
 	gqlparser "github.com/vektah/gqlparser/v2"
@@ -58,10 +58,11 @@ type ComplexityRoot struct {
 	}
 
 	Event struct {
-		EventID   func(childComplexity int) int
-		EventMeta func(childComplexity int) int
-		ID        func(childComplexity int) int
-		Values    func(childComplexity int) int
+		Bytes   func(childComplexity int) int
+		EventID func(childComplexity int) int
+		ID      func(childComplexity int) int
+		Meta    func(childComplexity int) int
+		Values  func(childComplexity int) int
 	}
 
 	Meta struct {
@@ -123,7 +124,7 @@ type QueryResolver interface {
 	SaltyUser(ctx context.Context, nick string) (*salty.SaltyUser, error)
 }
 type SubscriptionResolver interface {
-	EventAdded(ctx context.Context, streamID string, after int64) (<-chan *model.Event, error)
+	EventAdded(ctx context.Context, streamID string, after int64) (<-chan *es.GQLEvent, error)
 	PostAdded(ctx context.Context, streamID string, after int64) (<-chan *msgbus.PostEvent, error)
 }
 
@@ -156,6 +157,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Connection.Paging(childComplexity), true
 
+	case "Event.bytes":
+		if e.complexity.Event.Bytes == nil {
+			break
+		}
+
+		return e.complexity.Event.Bytes(childComplexity), true
+
 	case "Event.eventID":
 		if e.complexity.Event.EventID == nil {
 			break
@@ -163,19 +171,19 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Event.EventID(childComplexity), true
 
-	case "Event.eventMeta":
-		if e.complexity.Event.EventMeta == nil {
-			break
-		}
-
-		return e.complexity.Event.EventMeta(childComplexity), true
-
 	case "Event.id":
 		if e.complexity.Event.ID == nil {
 			break
 		}
 
 		return e.complexity.Event.ID(childComplexity), true
+
+	case "Event.meta":
+		if e.complexity.Event.Meta == nil {
+			break
+		}
+
+		return e.complexity.Event.Meta(childComplexity), true
 
 	case "Event.values":
 		if e.complexity.Event.Values == nil {
@@ -491,12 +499,13 @@ extend type Subscription {
     eventAdded(streamID: String! after: Int! = -1): Event
 }
 
-type Event implements Edge {
+type Event implements Edge @goModel(model: "github.com/sour-is/ev/pkg/es.GQLEvent") {
     id: ID!
 
     eventID: String!
     values: Map!
-    eventMeta: Meta!
+    bytes: String!
+    meta: Meta!
 }`, BuiltIn: false},
 	{Name: "../../../pkg/gql/common.graphqls", Input: `scalar Time
 scalar Map
@@ -877,7 +886,7 @@ func (ec *executionContext) fieldContext_Connection_edges(ctx context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_id(ctx context.Context, field graphql.CollectedField, obj *model.Event) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_id(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_id(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -891,7 +900,7 @@ func (ec *executionContext) _Event_id(ctx context.Context, field graphql.Collect
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.ID, nil
+		return obj.ID(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -912,7 +921,7 @@ func (ec *executionContext) fieldContext_Event_id(ctx context.Context, field gra
 	fc = &graphql.FieldContext{
 		Object:     "Event",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
@@ -921,7 +930,7 @@ func (ec *executionContext) fieldContext_Event_id(ctx context.Context, field gra
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_eventID(ctx context.Context, field graphql.CollectedField, obj *model.Event) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_eventID(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_eventID(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -935,7 +944,7 @@ func (ec *executionContext) _Event_eventID(ctx context.Context, field graphql.Co
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.EventID, nil
+		return obj.EventID(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -956,7 +965,7 @@ func (ec *executionContext) fieldContext_Event_eventID(ctx context.Context, fiel
 	fc = &graphql.FieldContext{
 		Object:     "Event",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
@@ -965,7 +974,7 @@ func (ec *executionContext) fieldContext_Event_eventID(ctx context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_values(ctx context.Context, field graphql.CollectedField, obj *model.Event) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_values(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_values(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -979,7 +988,7 @@ func (ec *executionContext) _Event_values(ctx context.Context, field graphql.Col
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Values, nil
+		return obj.Values(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1000,7 +1009,7 @@ func (ec *executionContext) fieldContext_Event_values(ctx context.Context, field
 	fc = &graphql.FieldContext{
 		Object:     "Event",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Map does not have child fields")
@@ -1009,8 +1018,8 @@ func (ec *executionContext) fieldContext_Event_values(ctx context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_eventMeta(ctx context.Context, field graphql.CollectedField, obj *model.Event) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_Event_eventMeta(ctx, field)
+func (ec *executionContext) _Event_bytes(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Event_bytes(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -1023,7 +1032,51 @@ func (ec *executionContext) _Event_eventMeta(ctx context.Context, field graphql.
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.EventMeta, nil
+		return obj.Bytes()
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Event_bytes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Event",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Event_meta(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Event_meta(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Meta(), nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1040,11 +1093,11 @@ func (ec *executionContext) _Event_eventMeta(ctx context.Context, field graphql.
 	return ec.marshalNMeta2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋesᚋeventᚐMeta(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_Event_eventMeta(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Event_meta(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Event",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
@@ -2269,7 +2322,7 @@ func (ec *executionContext) _Subscription_eventAdded(ctx context.Context, field 
 	}
 	return func(ctx context.Context) graphql.Marshaler {
 		select {
-		case res, ok := <-resTmp.(<-chan *model.Event):
+		case res, ok := <-resTmp.(<-chan *es.GQLEvent):
 			if !ok {
 				return nil
 			}
@@ -2277,7 +2330,7 @@ func (ec *executionContext) _Subscription_eventAdded(ctx context.Context, field 
 				w.Write([]byte{'{'})
 				graphql.MarshalString(field.Alias).MarshalGQL(w)
 				w.Write([]byte{':'})
-				ec.marshalOEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋinternalᚋgraphᚋmodelᚐEvent(ctx, field.Selections, res).MarshalGQL(w)
+				ec.marshalOEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋesᚐGQLEvent(ctx, field.Selections, res).MarshalGQL(w)
 				w.Write([]byte{'}'})
 			})
 		case <-ctx.Done():
@@ -2300,8 +2353,10 @@ func (ec *executionContext) fieldContext_Subscription_eventAdded(ctx context.Con
 				return ec.fieldContext_Event_eventID(ctx, field)
 			case "values":
 				return ec.fieldContext_Event_values(ctx, field)
-			case "eventMeta":
-				return ec.fieldContext_Event_eventMeta(ctx, field)
+			case "bytes":
+				return ec.fieldContext_Event_bytes(ctx, field)
+			case "meta":
+				return ec.fieldContext_Event_meta(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Event", field.Name)
 		},
@@ -4263,9 +4318,7 @@ func (ec *executionContext) _Edge(ctx context.Context, sel ast.SelectionSet, obj
 	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
-	case model.Event:
-		return ec._Event(ctx, sel, &obj)
-	case *model.Event:
+	case *es.GQLEvent:
 		if obj == nil {
 			return graphql.Null
 		}
@@ -4321,7 +4374,7 @@ func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSe
 
 var eventImplementors = []string{"Event", "Edge"}
 
-func (ec *executionContext) _Event(ctx context.Context, sel ast.SelectionSet, obj *model.Event) graphql.Marshaler {
+func (ec *executionContext) _Event(ctx context.Context, sel ast.SelectionSet, obj *es.GQLEvent) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, eventImplementors)
 	out := graphql.NewFieldSet(fields)
 	var invalids uint32
@@ -4350,9 +4403,16 @@ func (ec *executionContext) _Event(ctx context.Context, sel ast.SelectionSet, ob
 			if out.Values[i] == graphql.Null {
 				invalids++
 			}
-		case "eventMeta":
+		case "bytes":
 
-			out.Values[i] = ec._Event_eventMeta(ctx, field, obj)
+			out.Values[i] = ec._Event_bytes(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "meta":
+
+			out.Values[i] = ec._Event_meta(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
 				invalids++
@@ -5658,7 +5718,7 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) marshalOEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋinternalᚋgraphᚋmodelᚐEvent(ctx context.Context, sel ast.SelectionSet, v *model.Event) graphql.Marshaler {
+func (ec *executionContext) marshalOEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋesᚐGQLEvent(ctx context.Context, sel ast.SelectionSet, v *es.GQLEvent) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

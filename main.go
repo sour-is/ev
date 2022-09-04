@@ -68,6 +68,8 @@ func run(ctx context.Context) error {
 		enable := set(strings.Fields(env("EV_ENABLE", "salty msgbus gql peers"))...)
 		var svcs []interface{ RegisterHTTP(*http.ServeMux) }
 
+		svcs = append(svcs, es)
+
 		if enable.Has("salty") {
 			span.AddEvent("Enable Salty")
 			salty, err := salty.New(ctx, es, path.Join(env("EV_BASE_URL", "http://"+s.Addr), "inbox"))
@@ -148,10 +150,15 @@ func env(name, defaultValue string) string {
 	return defaultValue
 }
 func httpMux(fns ...interface{ RegisterHTTP(*http.ServeMux) }) http.Handler {
-	mux := http.NewServeMux()
+	mux := newMux()
 	for _, fn := range fns {
-		fn.RegisterHTTP(mux)
+		fn.RegisterHTTP(mux.ServeMux)
+
+		if fn, ok := fn.(interface{ RegisterAPIv1(*http.ServeMux) }); ok {
+			fn.RegisterAPIv1(mux.api)
+		}
 	}
+
 	return cors.AllowAll().Handler(mux)
 }
 
@@ -182,4 +189,21 @@ func (s Set[T]) String() string {
 	b.WriteString(strings.Join(lis, ","))
 	b.WriteString(")")
 	return b.String()
+}
+
+type mux struct {
+	*http.ServeMux
+	api *http.ServeMux
+}
+func newMux() *mux {
+	mux := &mux{
+		api: http.NewServeMux(),
+		ServeMux: http.NewServeMux(),
+	}
+	mux.Handle("/api/v1/", http.StripPrefix("/api/v1/", mux.api))
+
+	return mux
+}
+func (m mux) HandleAPIv1(pattern string, handler http.Handler) {
+	m.api.Handle(pattern, handler)
 }

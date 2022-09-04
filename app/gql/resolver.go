@@ -15,6 +15,7 @@ import (
 	"github.com/sour-is/ev/app/salty"
 	"github.com/sour-is/ev/internal/graph/generated"
 	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/gql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
@@ -22,6 +23,7 @@ import (
 type Resolver struct {
 	msgbus.MsgbusResolver
 	salty.SaltyResolver
+	es.EventResolver
 }
 
 func New(ctx context.Context, resolvers ...interface{ RegisterHTTP(*http.ServeMux) }) (*Resolver, error) {
@@ -43,13 +45,12 @@ outer:
 			if field.IsNil() && rs.Type().Implements(field.Type()) {
 				span.AddEvent(fmt.Sprint("found ", field.Type().Name()))
 				field.Set(rs)
-				break outer
+				continue outer
 			}
 		}
+
 		span.AddEvent(fmt.Sprint("default ", field.Type().Name()))
-
 		field.Set(noop)
-
 	}
 
 	return r, nil
@@ -107,6 +108,7 @@ func NoopRecover(ctx context.Context, err interface{}) error {
 
 var _ msgbus.MsgbusResolver = (*noop)(nil)
 var _ salty.SaltyResolver = (*noop)(nil)
+var _ es.EventResolver = (*noop)(nil)
 
 func (*noop) CreateSaltyUser(ctx context.Context, nick string, pubkey string) (*salty.SaltyUser, error) {
 	panic("not implemented")
@@ -120,4 +122,11 @@ func (*noop) SaltyUser(ctx context.Context, nick string) (*salty.SaltyUser, erro
 func (*noop) PostAdded(ctx context.Context, streamID string, after int64) (<-chan *msgbus.PostEvent, error) {
 	panic("not implemented")
 }
+func (*noop) Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
+	panic("not implemented")
+}
+func (*noop) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *es.GQLEvent, error) {
+	panic("not implemented")
+}
+
 func (*noop) RegisterHTTP(*http.ServeMux) {}

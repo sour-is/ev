@@ -435,14 +435,21 @@ func (e *PostEvent) SetEventMeta(eventMeta event.Meta) {
 	}
 	e.eventMeta = eventMeta
 }
-func (e *PostEvent) MarshalBinary() ([]byte, error) {
-	j := struct {
+func (e *PostEvent) Values() any {
+	if e == nil {
+		return nil
+	}
+
+	return struct {
 		Payload []byte
 		Tags    []string
 	}{
 		Payload: e.payload,
 		Tags:    e.tags,
 	}
+}
+func (e *PostEvent) MarshalBinary() ([]byte, error) {
+	j := e.Values()
 	return json.Marshal(&j)
 }
 func (e *PostEvent) UnmarshalBinary(b []byte) error {

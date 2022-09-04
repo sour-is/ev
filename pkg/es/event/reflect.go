@@ -247,11 +247,22 @@ func embedJSON(s string) json.RawMessage {
 	return []byte(fmt.Sprintf(`"%s"`, strings.Replace(s, `"`, `\"`, -1)))
 }
 
-func values(e Event) map[string]any {
-	m := make(map[string]any)
-	v := reflect.ValueOf(e)
-	for _, idx := range reflect.VisibleFields(v) {
-		field := v.FieldByIndex(idx.Index)
-		m[field.]
+func Values(e Event) map[string]any {
+	var a any = e
+
+	if e, ok := e.(interface{ Values() any }); ok {
+		a = e.Values()
 	}
+
+	m := make(map[string]any)
+	v := reflect.Indirect(reflect.ValueOf(a))
+	for _, idx := range reflect.VisibleFields(v.Type()) {
+		if !idx.IsExported() {
+			continue
+		}
+
+		field := v.FieldByIndex(idx.Index)
+		m[idx.Name] = field.Interface()
+	}
+	return m
 }
