@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
 	"go.uber.org/multierr"
 
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/cache"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
@@ -38,10 +38,10 @@ const AppendOnly = es.AppendOnly
 const AllEvents = es.AllEvents
 
 func Init(ctx context.Context) error {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
-	m := logz.Meter(ctx)
+	m := lg.Meter(ctx)
 	var err, errs error
 
 	Mdisk_open, err := m.SyncInt64().Counter("disk_open")
@@ -61,7 +61,7 @@ func Init(ctx context.Context) error {
 var _ driver.Driver = (*diskStore)(nil)
 
 func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	d.Mdisk_open.Add(ctx, 1)
@@ -82,11 +82,11 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 		}
 	}
 	c, err := cache.NewWithEvict(CachSize, func(ctx context.Context, s string, l *lockedWal) {
-		_, span := logz.Span(ctx)
+		_, span := lg.Span(ctx)
 		defer span.End()
 
 		l.Modify(ctx, func(w *wal.Log) error {
-			_, span := logz.Span(ctx)
+			_, span := lg.Span(ctx)
 			defer span.End()
 
 			d.Mdisk_evict.Add(ctx, 1)
@@ -112,13 +112,13 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 	}, nil
 }
 func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	el := &eventLog{streamID: streamID}
 
 	return el, d.openlogs.Modify(ctx, func(openlogs *openlogs) error {
-		_, span := logz.Span(ctx)
+		_, span := lg.Span(ctx)
 		defer span.End()
 
 		if events, ok := openlogs.logs.Get(streamID); ok {
@@ -145,14 +145,14 @@ type eventLog struct {
 var _ driver.EventLog = (*eventLog)(nil)
 
 func (e *eventLog) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	event.SetStreamID(e.streamID, events...)
 
 	var count uint64
 	err := e.events.Modify(ctx, func(l *wal.Log) error {
-		_, span := logz.Span(ctx)
+		_, span := lg.Span(ctx)
 		defer span.End()
 
 		last, err := l.LastIndex()
@@ -190,13 +190,13 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 	return count, err
 }
 func (e *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, error) {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	var events event.Events
 
 	err := e.events.Modify(ctx, func(stream *wal.Log) error {
-		_, span := logz.Span(ctx)
+		_, span := lg.Span(ctx)
 		defer span.End()
 
 		first, err := stream.FirstIndex()
@@ -259,7 +259,7 @@ func (e *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, er
 	return events, nil
 }
 func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	var idx uint64
@@ -273,7 +273,7 @@ func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	return idx, err
 }
 func (e *eventLog) LastIndex(ctx context.Context) (uint64, error) {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	var idx uint64

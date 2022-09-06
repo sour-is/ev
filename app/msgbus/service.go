@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
@@ -35,7 +35,7 @@ type MsgbusResolver interface {
 }
 
 func New(ctx context.Context, es *es.EventStore) (*service, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	if err := event.Register(ctx, &PostEvent{}); err != nil {
@@ -45,7 +45,7 @@ func New(ctx context.Context, es *es.EventStore) (*service, error) {
 		return nil, err
 	}
 
-	m := logz.Meter(ctx)
+	m := lg.Meter(ctx)
 
 	svc := &service{es: es}
 
@@ -72,11 +72,11 @@ var upgrader = websocket.Upgrader{
 }
 
 func (s *service) RegisterHTTP(mux *http.ServeMux) {
-	mux.Handle("/inbox/", logz.Htrace(http.StripPrefix("/inbox/", s), "inbox"))
+	mux.Handle("/inbox/", lg.Htrace(http.StripPrefix("/inbox/", s), "inbox"))
 }
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 	r = r.WithContext(ctx)
 
@@ -97,7 +97,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Posts is the resolver for the events field.
 func (r *service) Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	r.Mresolver_posts.Add(ctx, 1)
@@ -143,7 +143,7 @@ func (r *service) Posts(ctx context.Context, streamID string, paging *gql.PageIn
 }
 
 func (r *service) PostAdded(ctx context.Context, streamID string, after int64) (<-chan *PostEvent, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	r.Mresolver_post_added.Add(ctx, 1)
@@ -162,15 +162,19 @@ func (r *service) PostAdded(ctx context.Context, streamID string, after int64) (
 	ch := make(chan *PostEvent)
 
 	go func() {
-		ctx, span := logz.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer cancel()
-			err := sub.Close(ctx)
-			span.RecordError(err)
-		}()
+		{
+			ctx, span := lg.Fork(ctx)
+			defer func() {
+				defer span.End()
+				ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+				defer cancel()
+				err := sub.Close(ctx)
+				span.RecordError(err)
+			}()
+		}
 
 		for sub.Recv(ctx) {
 			events, err := sub.Events(ctx)
@@ -199,7 +203,7 @@ func (r *service) PostAdded(ctx context.Context, streamID string, after int64) (
 
 func (s *service) get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	name, _, _ := strings.Cut(r.URL.Path, "/")
@@ -253,7 +257,7 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 func (s *service) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	name, tags, _ := strings.Cut(r.URL.Path, "/")
@@ -320,7 +324,7 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 }
 func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	name, _, _ := strings.Cut(r.URL.Path, "/")
@@ -381,12 +385,16 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		return
 	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		span.AddEvent("stop ws")
-		sub.Close(ctx)
-	}()
+	{
+		ctx, span := lg.Fork(ctx)
+		defer func() {
+			defer span.End()
+			ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+			defer cancel()
+			err := sub.Close(ctx)
+			span.RecordError(err)
+		}()
+	}
 
 	span.AddEvent("start ws")
 	for sub.Recv(ctx) {

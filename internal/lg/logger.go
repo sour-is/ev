@@ -1,4 +1,4 @@
-package logz
+package lg
 
 import (
 	"bytes"
@@ -72,7 +72,7 @@ func initLogger(name string) func() error {
 	l, err := logzio.New(
 		token.Secret(),
 		// logzio.SetDebug(os.Stderr),
-		logzio.SetUrl(env("LOGZIO_LOG_URL", "https://listener.logz.io:8071")),
+		logzio.SetUrl(env("LOGZIO_LOG_URL", "https://listener.lg.io:8071")),
 		logzio.SetDrainDuration(time.Second*5),
 		logzio.SetTempDirectory(env("LOGZIO_DIR", os.TempDir())),
 		logzio.SetCheckDiskSpace(true),

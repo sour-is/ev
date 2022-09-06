@@ -11,7 +11,7 @@ import (
 	ulid "github.com/oklog/ulid/v2"
 	contentnegotiation "gitlab.com/jamietanna/content-negotiation-go"
 
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 )
@@ -28,7 +28,7 @@ type service struct {
 }
 
 func New(ctx context.Context, es *es.EventStore) (*service, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	if err := event.Register(ctx, &Request{}, &Result{}, &VersionChanged{}); err != nil {
@@ -41,13 +41,13 @@ func New(ctx context.Context, es *es.EventStore) (*service, error) {
 	return svc, nil
 }
 func (s *service) RegisterHTTP(mux *http.ServeMux) {
-	mux.Handle("/peers/", logz.Htrace(s, "peers"))
+	mux.Handle("/peers/", lg.Htrace(s, "peers"))
 
 }
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	r = r.WithContext(ctx)
@@ -90,7 +90,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *service) getPending(w http.ResponseWriter, r *http.Request, uuid string) {
 	ctx := r.Context()
 
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	info, err := es.Upsert(ctx, s.es, "pf-info", func(ctx context.Context, agg *Info) error {

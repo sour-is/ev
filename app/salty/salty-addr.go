@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/keys-pub/keys"
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 )
 
 // Config represents a Salty Config for a User which at a minimum is required
@@ -79,7 +79,7 @@ func (a *Addr) DiscoveredDomain() string {
 }
 
 func (a *Addr) Refresh(ctx context.Context) error {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	span.AddEvent(fmt.Sprintf("Looking up SRV record for _salty._tcp.%s", a.Domain))
@@ -118,7 +118,7 @@ func (a *Addr) Refresh(ctx context.Context) error {
 }
 
 func fetchConfig(ctx context.Context, addr string) (config Config, cap Capabilities, err error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	var req *http.Request

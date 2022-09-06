@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/keys-pub/keys"
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
@@ -49,7 +49,7 @@ type SaltyResolver interface {
 }
 
 func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	if err := event.Register(ctx, &UserRegistered{}); err != nil {
@@ -59,7 +59,7 @@ func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, erro
 		return nil, err
 	}
 
-	m := logz.Meter(ctx)
+	m := lg.Meter(ctx)
 
 	svc := &service{baseURL: baseURL, es: es, dns: net.DefaultResolver}
 
@@ -93,7 +93,7 @@ func (s *service) BaseURL() string {
 	return s.baseURL
 }
 func (s *service) RegisterHTTP(mux *http.ServeMux) {
-	mux.Handle("/.well-known/salty/", logz.Htrace(s, "lookup"))
+	mux.Handle("/.well-known/salty/", lg.Htrace(s, "lookup"))
 }
 func (s *service) RegisterAPIv1(mux *http.ServeMux) {
 	mux.HandleFunc("/ping", s.apiv1)
@@ -103,7 +103,7 @@ func (s *service) RegisterAPIv1(mux *http.ServeMux) {
 }
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	addr := "saltyuser-" + strings.TrimPrefix(r.URL.Path, "/.well-known/salty/")
@@ -137,7 +137,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (s *service) CreateSaltyUser(ctx context.Context, nick string, pub string) (*SaltyUser, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	s.m_create_user.Add(ctx, 1)
@@ -167,7 +167,7 @@ func (s *service) CreateSaltyUser(ctx context.Context, nick string, pub string) 
 	return a, nil
 }
 func (s *service) SaltyUser(ctx context.Context, nick string) (*SaltyUser, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	s.m_get_user.Add(ctx, 1)
@@ -200,7 +200,7 @@ func (s *service) GetMiddleware() func(http.Handler) http.Handler {
 func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	switch r.Method {

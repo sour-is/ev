@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,18 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/cors"
+	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sour-is/ev/app/gql"
 	"github.com/sour-is/ev/app/msgbus"
 	"github.com/sour-is/ev/app/peerfinder"
 	"github.com/sour-is/ev/app/salty"
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	diskstore "github.com/sour-is/ev/pkg/es/driver/disk-store"
 	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
+	"github.com/sour-is/ev/pkg/es/driver/projecter"
 	"github.com/sour-is/ev/pkg/es/driver/streamer"
+	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/set"
 )
 
 const AppName string = "sour.is-ev"
@@ -35,7 +36,7 @@ func main() {
 		defer cancel()
 	}()
 
-	ctx, stop := logz.Init(ctx, AppName)
+	ctx, stop := lg.Init(ctx, AppName)
 	defer stop()
 
 	if err := run(ctx); err != nil && err != http.ErrServerClosed {
@@ -46,12 +47,20 @@ func run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	{
-		ctx, span := logz.Span(ctx)
+		ctx, span := lg.Span(ctx)
 
-		diskstore.Init(ctx)
-		memstore.Init(ctx)
+		err := multierr.Combine(
+			es.Init(ctx),
+			event.Init(ctx),
+			diskstore.Init(ctx),
+			memstore.Init(ctx),
+		)
+		if err != nil {
+			span.RecordError(err)
+			return err
+		}
 
-		es, err := es.Open(ctx, env("EV_DATA", "file:data"), streamer.New(ctx))
+		es, err := es.Open(ctx, env("EV_DATA", "mem:"), streamer.New(ctx), projecter.New(ctx))
 		if err != nil {
 			span.RecordError(err)
 			return err
@@ -65,7 +74,7 @@ func run(ctx context.Context) error {
 			s.Addr = "[::]" + s.Addr
 		}
 
-		enable := set(strings.Fields(env("EV_ENABLE", "salty msgbus gql peers"))...)
+		enable := set.New(strings.Fields(env("EV_ENABLE", "salty msgbus gql peers"))...)
 		var svcs []interface{ RegisterHTTP(*http.ServeMux) }
 
 		svcs = append(svcs, es)
@@ -109,14 +118,14 @@ func run(ctx context.Context) error {
 			}
 			svcs = append(svcs, gql)
 		}
-		svcs = append(svcs, logz.NewHTTP(ctx))
+		svcs = append(svcs, lg.NewHTTP(ctx))
 
 		s.Handler = httpMux(svcs...)
 
 		log.Print("Listen on ", s.Addr)
-		span.AddEvent("begin listen and serve")
+		span.AddEvent("begin listen and serve on " + s.Addr)
 
-		Mup, err := logz.Meter(ctx).SyncInt64().UpDownCounter("up")
+		Mup, err := lg.Meter(ctx).SyncInt64().UpDownCounter("up")
 		if err != nil {
 			return err
 		}
@@ -148,62 +157,4 @@ func env(name, defaultValue string) string {
 	}
 	log.Println("#", name, "=", defaultValue, "(default)")
 	return defaultValue
-}
-func httpMux(fns ...interface{ RegisterHTTP(*http.ServeMux) }) http.Handler {
-	mux := newMux()
-	for _, fn := range fns {
-		fn.RegisterHTTP(mux.ServeMux)
-
-		if fn, ok := fn.(interface{ RegisterAPIv1(*http.ServeMux) }); ok {
-			fn.RegisterAPIv1(mux.api)
-		}
-	}
-
-	return cors.AllowAll().Handler(mux)
-}
-
-type Set[T comparable] map[T]struct{}
-
-func set[T comparable](items ...T) Set[T] {
-	s := make(map[T]struct{}, len(items))
-	for i := range items {
-		s[items[i]] = struct{}{}
-	}
-	return s
-}
-func (s Set[T]) Has(v T) bool {
-	_, ok := (s)[v]
-	return ok
-}
-func (s Set[T]) String() string {
-	if s == nil {
-		return "set(<nil>)"
-	}
-	lis := make([]string, 0, len(s))
-	for k := range s {
-		lis = append(lis, fmt.Sprint(k))
-	}
-
-	var b bytes.Buffer
-	b.WriteString("set(")
-	b.WriteString(strings.Join(lis, ","))
-	b.WriteString(")")
-	return b.String()
-}
-
-type mux struct {
-	*http.ServeMux
-	api *http.ServeMux
-}
-func newMux() *mux {
-	mux := &mux{
-		api: http.NewServeMux(),
-		ServeMux: http.NewServeMux(),
-	}
-	mux.Handle("/api/v1/", http.StripPrefix("/api/v1/", mux.api))
-
-	return mux
-}
-func (m mux) HandleAPIv1(pattern string, handler http.Handler) {
-	m.api.Handle(pattern, handler)
 }

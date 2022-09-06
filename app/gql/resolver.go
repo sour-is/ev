@@ -14,7 +14,7 @@ import (
 	"github.com/sour-is/ev/app/msgbus"
 	"github.com/sour-is/ev/app/salty"
 	"github.com/sour-is/ev/internal/graph/generated"
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/gql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
@@ -27,7 +27,7 @@ type Resolver struct {
 }
 
 func New(ctx context.Context, resolvers ...interface{ RegisterHTTP(*http.ServeMux) }) (*Resolver, error) {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	r := &Resolver{}
@@ -90,7 +90,7 @@ func (r *Resolver) RegisterHTTP(mux *http.ServeMux) {
 	gql.SetRecoverFunc(NoopRecover)
 	gql.Use(otelgqlgen.Middleware())
 	mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
-	mux.Handle("/gql", logz.Htrace(r.ChainMiddlewares(gql), "gql"))
+	mux.Handle("/gql", lg.Htrace(r.ChainMiddlewares(gql), "gql"))
 }
 
 type noop struct{}

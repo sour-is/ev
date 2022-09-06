@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
 )
@@ -17,7 +17,7 @@ type EventResolver interface {
 }
 
 func (es *EventStore) Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	lis, err := es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
@@ -53,7 +53,7 @@ func (es *EventStore) Events(ctx context.Context, streamID string, paging *gql.P
 	}, nil
 }
 func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *GQLEvent, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	es := e.EventStream()
@@ -70,15 +70,19 @@ func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int6
 	ch := make(chan *GQLEvent)
 
 	go func() {
-		ctx, span := logz.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer cancel()
-			err := sub.Close(ctx)
-			span.RecordError(err)
-		}()
+		{
+			ctx, span := lg.Fork(ctx)
+			defer func() {
+				defer span.End()
+				ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+				defer cancel()
+				err := sub.Close(ctx)
+				span.RecordError(err)
+			}()
+		}
 
 		for sub.Recv(ctx) {
 			events, err := sub.Events(ctx)
@@ -109,7 +113,7 @@ type GQLEvent struct {
 }
 
 func (e *GQLEvent) ID() string {
-	return "Event/" + e.e.EventMeta().GetEventID()
+	return fmt.Sprint(e.e.EventMeta().StreamID, "@", e.e.EventMeta().Position)
 }
 func (e *GQLEvent) EventID() string {
 	return e.e.EventMeta().GetEventID()
