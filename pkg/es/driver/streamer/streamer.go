@@ -2,12 +2,15 @@ package streamer
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type state struct {
@@ -20,7 +23,7 @@ type streamer struct {
 }
 
 func New(ctx context.Context) *streamer {
-	ctx, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	return &streamer{state: locker.New(&state{subscribers: map[string][]*subscription{}})}
@@ -39,13 +42,13 @@ func (s *streamer) Unwrap() driver.Driver {
 var _ driver.Driver = (*streamer)(nil)
 
 func (s *streamer) Open(ctx context.Context, dsn string) (driver.Driver, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	return s.up.Open(ctx, dsn)
 }
 func (s *streamer) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	l, err := s.up.EventLog(ctx, streamID)
@@ -55,7 +58,7 @@ func (s *streamer) EventLog(ctx context.Context, streamID string) (driver.EventL
 var _ driver.EventStream = (*streamer)(nil)
 
 func (s *streamer) Subscribe(ctx context.Context, streamID string, start int64) (driver.Subscription, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	events, err := s.up.EventLog(ctx, streamID)
@@ -75,22 +78,24 @@ func (s *streamer) Subscribe(ctx context.Context, streamID string, start int64) 
 	})
 }
 func (s *streamer) Send(ctx context.Context, streamID string, events event.Events) error {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	return s.state.Modify(ctx, func(state *state) error {
-		ctx, span := logz.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
+		span.AddEvent(fmt.Sprint("subscribers=", len(state.subscribers[streamID])))
 
 		for _, sub := range state.subscribers[streamID] {
 			err := sub.position.Modify(ctx, func(position *position) error {
-				_, span := logz.Span(ctx)
+				_, span := lg.Span(ctx)
 				defer span.End()
 
 				position.size = int64(events.Last().EventMeta().Position - uint64(position.idx))
 
 				if position.wait != nil {
 					close(position.wait)
+					position.link = trace.LinkFromContext(ctx, attribute.String("src", "event"))
 					position.wait = nil
 				}
 				return nil
@@ -102,17 +107,16 @@ func (s *streamer) Send(ctx context.Context, streamID string, events event.Event
 		return nil
 	})
 }
-
 func (s *streamer) delete(streamID string, sub *subscription) func(context.Context) error {
 	return func(ctx context.Context) error {
-		ctx, span := logz.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		return s.state.Modify(ctx, func(state *state) error {
-			_, span := logz.Span(ctx)
+			_, span := lg.Span(ctx)
 			defer span.End()
 
 			lis := state.subscribers[streamID]
@@ -138,44 +142,53 @@ type wrapper struct {
 var _ driver.EventLog = (*wrapper)(nil)
 
 func (w *wrapper) Read(ctx context.Context, pos int64, count int64) (event.Events, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	return w.up.Read(ctx, pos, count)
 }
-
 func (w *wrapper) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	i, err := w.up.Append(ctx, events, version)
 	if err != nil {
 		return i, err
 	}
-	return i, w.streamer.Send(ctx, w.topic, events)
-}
 
+	ctx, span = lg.Fork(ctx)
+	go func() {
+		defer span.End()
+
+		err := w.streamer.Send(ctx, w.topic, events)
+		span.RecordError(err)
+	}()
+
+	return i, nil
+}
 func (w *wrapper) FirstIndex(ctx context.Context) (uint64, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	return w.up.FirstIndex(ctx)
 }
-
 func (w *wrapper) LastIndex(ctx context.Context) (uint64, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	return w.up.LastIndex(ctx)
 }
-
 func (w *wrapper) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+
 	return w.up.LoadForUpdate(ctx, a, fn)
 }
 
 type position struct {
 	size int64
 	idx  int64
+	link trace.Link
 	wait chan struct{}
 }
 
@@ -189,13 +202,13 @@ type subscription struct {
 }
 
 func (s *subscription) Recv(ctx context.Context) bool {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	var wait func(context.Context) bool
 
 	err := s.position.Modify(ctx, func(position *position) error {
-		_, span := logz.Span(ctx)
+		_, span := lg.Span(ctx)
 		defer span.End()
 
 		if position.size == es.AllEvents {
@@ -204,11 +217,17 @@ func (s *subscription) Recv(ctx context.Context) bool {
 		if position.size == 0 {
 			position.wait = make(chan struct{})
 			wait = func(ctx context.Context) bool {
-				ctx, span := logz.Span(ctx)
+				ctx, span := lg.Span(ctx)
 				defer span.End()
 
 				select {
 				case <-position.wait:
+					if position.link.SpanContext.IsValid() {
+						_, span := lg.Span(ctx, trace.WithLinks(position.link))
+						span.AddEvent("recv event")
+						span.End()
+						position.link = trace.Link{}
+					}
 
 					return true
 				case <-ctx.Done():
@@ -232,12 +251,12 @@ func (s *subscription) Recv(ctx context.Context) bool {
 	return true
 }
 func (s *subscription) Events(ctx context.Context) (event.Events, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	var events event.Events
 	return events, s.position.Modify(ctx, func(position *position) error {
-		ctx, span := logz.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
 		var err error
@@ -253,7 +272,7 @@ func (s *subscription) Events(ctx context.Context) (event.Events, error) {
 	})
 }
 func (s *subscription) Close(ctx context.Context) error {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	return s.unsub(ctx)

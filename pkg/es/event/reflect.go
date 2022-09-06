@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/locker"
 )
 
@@ -67,7 +67,7 @@ func (u *UnknownEvent) MarshalBinary() ([]byte, error) {
 
 // Register a type container for Unmarshalling values into. The type must implement Event and not be a nil value.
 func Register(ctx context.Context, lis ...Event) error {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	for _, e := range lis {
@@ -84,7 +84,7 @@ func Register(ctx context.Context, lis ...Event) error {
 	return nil
 }
 func RegisterName(ctx context.Context, name string, e Event) error {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	if e == nil {
@@ -107,7 +107,7 @@ func RegisterName(ctx context.Context, name string, e Event) error {
 	span.AddEvent("register: " + name)
 
 	if err := eventTypes.Modify(ctx, func(c *config) error {
-		_, span := logz.Span(ctx)
+		_, span := lg.Span(ctx)
 		defer span.End()
 
 		c.eventTypes[name] = typ
@@ -119,13 +119,13 @@ func RegisterName(ctx context.Context, name string, e Event) error {
 	return nil
 }
 func GetContainer(ctx context.Context, s string) Event {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	var e Event
 
 	eventTypes.Modify(ctx, func(c *config) error {
-		_, span := logz.Span(ctx)
+		_, span := lg.Span(ctx)
 		defer span.End()
 
 		typ, ok := c.eventTypes[s]
@@ -176,7 +176,7 @@ func MarshalBinary(e Event) (txt []byte, err error) {
 }
 
 func UnmarshalBinary(ctx context.Context, txt []byte, pos uint64) (e Event, err error) {
-	_, span := logz.Span(ctx)
+	_, span := lg.Span(ctx)
 	defer span.End()
 
 	sp := bytes.SplitN(txt, []byte{'\t'}, 4)
@@ -245,4 +245,30 @@ func embedJSON(s string) json.RawMessage {
 		return []byte(s)
 	}
 	return []byte(fmt.Sprintf(`"%s"`, strings.Replace(s, `"`, `\"`, -1)))
+}
+
+func Values(e Event) map[string]any {
+	var a any = e
+
+	if e, ok := e.(interface{ Values() any }); ok {
+		a = e.Values()
+	}
+
+	m := make(map[string]any)
+	v := reflect.Indirect(reflect.ValueOf(a))
+	for _, idx := range reflect.VisibleFields(v.Type()) {
+		if !idx.IsExported() {
+			continue
+		}
+
+		field := v.FieldByIndex(idx.Index)
+
+		name := idx.Name
+		if n, ok := idx.Tag.Lookup("json"); ok {
+			name = n
+		}
+
+		m[name] = field.Interface()
+	}
+	return m
 }

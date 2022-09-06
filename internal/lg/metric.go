@@ -1,4 +1,4 @@
-package logz
+package lg
 
 import (
 	"context"

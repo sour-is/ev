@@ -1,4 +1,4 @@
-package logz
+package lg
 
 import (
 	"context"
@@ -33,10 +33,10 @@ func Tracer(ctx context.Context) trace.Tracer {
 	return otel.Tracer("")
 }
 
-func Span(ctx context.Context, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+func attrs(ctx context.Context) (string, []attribute.KeyValue) {
 	var attrs []attribute.KeyValue
 	var name string
-	if pc, file, line, ok := runtime.Caller(1); ok {
+	if pc, file, line, ok := runtime.Caller(2); ok {
 		if fn := runtime.FuncForPC(pc); fn != nil {
 			name = fn.Name()
 		}
@@ -47,10 +47,27 @@ func Span(ctx context.Context, opts ...trace.SpanStartOption) (context.Context, 
 			attribute.String("name", name),
 		)
 	}
+	return name, attrs
+}
+
+func Span(ctx context.Context, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	name, attrs := attrs(ctx)
 	ctx, span := Tracer(ctx).Start(ctx, name, opts...)
 	span.SetAttributes(attrs...)
 
 	return ctx, span
+}
+
+func Fork(ctx context.Context, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	name, attrs := attrs(ctx)
+	childCTX, childSpan := Tracer(ctx).Start(context.Background(), name, append(opts, trace.WithLinks(trace.LinkFromContext(ctx)))...)
+	childSpan.SetAttributes(attrs...)
+
+	_, span := Tracer(ctx).Start(ctx, name, append(opts, trace.WithLinks(trace.LinkFromContext(childCTX)))...)
+	span.SetAttributes(attrs...)
+	defer span.End()
+
+	return childCTX, childSpan
 }
 
 type SampleRate string
@@ -71,9 +88,13 @@ func initTracing(ctx context.Context, name string) (context.Context, func() erro
 		return ctx, nil
 	}
 
+	exporterAddr := env("EV_TRACE_ENDPOINT", "")
+	if exporterAddr == "" {
+		return ctx, nil
+	}
 	traceExporter, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithInsecure(),
-		otlptracehttp.WithEndpoint("localhost:4318"),
+		otlptracehttp.WithEndpoint(exporterAddr),
 	)
 	if err != nil {
 		log.Println(wrap(err, "failed to create trace exporter"))

@@ -2,6 +2,8 @@ package locker
 
 import (
 	"context"
+
+	"github.com/sour-is/ev/internal/lg"
 )
 
 type Locked[T any] struct {
@@ -18,6 +20,9 @@ func New[T any](initial *T) *Locked[T] {
 
 // Modify will call the function with the locked value
 func (s *Locked[T]) Modify(ctx context.Context, fn func(*T) error) error {
+	_, span := lg.Span(ctx)
+	defer span.End()
+
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

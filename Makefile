@@ -2,6 +2,7 @@ export PATH:=$(shell go env GOPATH)/bin:$(PATH)
 export EV_DATA=mem:
 export EV_HTTP=:8080
 export EV_TRACE_SAMPLE=always
+export EV_TRACE_ENDPOINT=localhost:4318
 -include local.mk
 
 air: gen

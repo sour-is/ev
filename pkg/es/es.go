@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sour-is/ev/internal/logz"
+	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
@@ -25,11 +25,8 @@ var (
 	drivers = locker.New(&config{drivers: make(map[string]driver.Driver)})
 )
 
-func Register(ctx context.Context, name string, d driver.Driver) error {
-	ctx, span := logz.Span(ctx)
-	defer span.End()
-
-	m := logz.Meter(ctx)
+func Init(ctx context.Context) error {
+	m := lg.Meter(ctx)
 
 	var err, errs error
 	Mes_open, err = m.SyncInt64().Counter("es_open")
@@ -47,15 +44,20 @@ func Register(ctx context.Context, name string, d driver.Driver) error {
 	Mes_append, err = m.SyncInt64().Counter("es_append")
 	errs = multierr.Append(errs, err)
 
-	err = drivers.Modify(ctx, func(c *config) error {
+	return errs
+}
+
+func Register(ctx context.Context, name string, d driver.Driver) error {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+
+	return drivers.Modify(ctx, func(c *config) error {
 		if _, set := c.drivers[name]; set {
 			return fmt.Errorf("driver %s already set", name)
 		}
 		c.drivers[name] = d
 		return nil
 	})
-
-	return multierr.Append(errs, err)
 }
 
 type EventStore struct {
@@ -71,7 +73,7 @@ var (
 )
 
 func Open(ctx context.Context, dsn string, options ...Option) (*EventStore, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	Mes_open.Add(ctx, 1)
@@ -107,7 +109,7 @@ type Option interface {
 }
 
 func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	events := agg.Events(true)
@@ -131,7 +133,7 @@ func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, er
 	return count, err
 }
 func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	Mes_load.Add(ctx, 1)
@@ -151,7 +153,7 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 	return nil
 }
 func (es *EventStore) Read(ctx context.Context, streamID string, pos, count int64) (event.Events, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	Mes_read.Add(ctx, 1)
@@ -163,7 +165,7 @@ func (es *EventStore) Read(ctx context.Context, streamID string, pos, count int6
 	return l.Read(ctx, pos, count)
 }
 func (es *EventStore) Append(ctx context.Context, streamID string, events event.Events) (uint64, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	Mes_append.Add(ctx, 1)
@@ -175,7 +177,7 @@ func (es *EventStore) Append(ctx context.Context, streamID string, events event.
 	return l.Append(ctx, events, AppendOnly)
 }
 func (es *EventStore) FirstIndex(ctx context.Context, streamID string) (uint64, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	l, err := es.Driver.EventLog(ctx, streamID)
@@ -185,7 +187,7 @@ func (es *EventStore) FirstIndex(ctx context.Context, streamID string) (uint64, 
 	return l.FirstIndex(ctx)
 }
 func (es *EventStore) LastIndex(ctx context.Context, streamID string) (uint64, error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	l, err := es.Driver.EventLog(ctx, streamID)
@@ -224,10 +226,14 @@ type PA[T any] interface {
 	event.Aggregate
 	*T
 }
+type PE[T any] interface {
+	event.Event
+	*T
+}
 
 // Create uses fn to create a new aggregate and store in db.
 func Create[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string, fn func(context.Context, T) error) (agg T, err error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	agg = new(A)
@@ -257,7 +263,7 @@ func Create[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 
 // Update uses fn to update an exsisting aggregate and store in db.
 func Update[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string, fn func(context.Context, T) error) (agg T, err error) {
-	ctx, span := logz.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	agg = new(A)
@@ -272,6 +278,33 @@ func Update[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 	}
 
 	if err = fn(ctx, agg); err != nil {
+		return
+	}
+
+	if _, err = es.Save(ctx, agg); err != nil {
+		return
+	}
+
+	return
+}
+
+// Update uses fn to update an exsisting aggregate and store in db.
+func Upsert[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string, fn func(context.Context, T) error) (agg T, err error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+
+	agg = new(A)
+	agg.SetStreamID(streamID)
+
+	if err = es.Load(ctx, agg); err != nil {
+		return
+	}
+
+	if err = fn(ctx, agg); err != nil {
+		return
+	}
+
+	if err = event.ShouldExist(agg); err != nil {
 		return
 	}
 
