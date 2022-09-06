@@ -76,8 +76,6 @@ func Open(ctx context.Context, dsn string, options ...Option) (*EventStore, erro
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	Mes_open.Add(ctx, 1)
-
 	name, _, ok := strings.Cut(dsn, ":")
 	if !ok {
 		return nil, fmt.Errorf("%w: no scheme", ErrNoDriver)
@@ -100,6 +98,8 @@ func Open(ctx context.Context, dsn string, options ...Option) (*EventStore, erro
 	for _, o := range options {
 		o.Apply(es)
 	}
+
+	Mes_open.Add(ctx, 1)
 
 	return es, err
 }
@@ -197,6 +197,9 @@ func (es *EventStore) LastIndex(ctx context.Context, streamID string) (uint64, e
 	return l.LastIndex(ctx)
 }
 func (es *EventStore) EventStream() driver.EventStream {
+	if es == nil {
+		return nil
+	}
 	d := es.Driver
 	for d != nil {
 		if d, ok := d.(driver.EventStream); ok {

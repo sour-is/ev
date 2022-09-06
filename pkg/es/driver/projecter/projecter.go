@@ -71,8 +71,9 @@ func (w *wrapper) Append(ctx context.Context, events event.Events, version uint6
 			for i := range events {
 				e := events[i]
 				eventType := event.TypeOf(e)
-				streamID := e.EventMeta().StreamID
-				streamPos := e.EventMeta().Position
+				m := e.EventMeta()
+				streamID := m.StreamID
+				streamPos := m.Position
 
 				e1 := event.NewPtr(streamID, streamPos)
 				event.SetStreamID("$all", e1)

@@ -89,9 +89,21 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 		for i := range events {
 			span.AddEvent(fmt.Sprintf("read event %d of %d", i, len(events)))
 
+			// --- clone event
+			e := events[i]
+			b, err := event.MarshalBinary(e)
+			if err != nil {
+				return err
+			}
+			e, err = event.UnmarshalBinary(ctx, b, e.EventMeta().Position)
+			if err != nil {
+				return err
+			}
+			// ---
+
 			pos := last + uint64(i) + 1
-			event.SetPosition(events[i], pos)
-			*stream = append(*stream, events[i])
+			event.SetPosition(e, pos)
+			*stream = append(*stream, e)
 		}
 
 		return nil
@@ -126,8 +138,17 @@ func (m *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Even
 		events = make([]event.Event, math.Abs(count))
 		for i := range events {
 			span.AddEvent(fmt.Sprintf("read event %d of %d", i, math.Abs(count)))
-			// ---
-			events[i] = (*stream)[start-1]
+
+			// --- clone event
+			e := (*stream)[start-1]
+			b, err := event.MarshalBinary(e)
+			if err != nil {
+				return err
+			}
+			events[i], err = event.UnmarshalBinary(ctx, b, e.EventMeta().Position)
+			if err != nil {
+				return err
+			}
 			// ---
 
 			if count > 0 {
@@ -140,14 +161,13 @@ func (m *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Even
 				break
 			}
 		}
+		event.SetStreamID(m.streamID, events...)
 
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	event.SetStreamID(m.streamID, events...)
 
 	return events, nil
 }
