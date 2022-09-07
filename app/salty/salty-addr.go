@@ -25,6 +25,9 @@ type Capabilities struct {
 }
 
 func (c Capabilities) String() string {
+	if c.AcceptEncoding == "" {
+		return "<nil>"
+	}
 	return fmt.Sprint("accept-encoding: ", c.AcceptEncoding)
 }
 
@@ -83,30 +86,40 @@ func (a *Addr) Refresh(ctx context.Context) error {
 	defer span.End()
 
 	span.AddEvent(fmt.Sprintf("Looking up SRV record for _salty._tcp.%s", a.Domain))
-	if target, _, err := a.dns.LookupSRV(ctx, "salty", "tcp", a.Domain); err == nil {
-		a.discoveredDomain = target
+	if _, srv, err := a.dns.LookupSRV(ctx, "salty", "tcp", a.Domain); err == nil {
+		if len(srv) > 0 {
+			a.discoveredDomain = strings.TrimSuffix(srv[0].Target, ".")
+		}
 		span.AddEvent(fmt.Sprintf("Discovered salty services %s", a.discoveredDomain))
 	} else if err != nil {
-		span.AddEvent(fmt.Sprintf("error looking up SRV record for _salty._tcp.%s : %s", a.Domain, err))
+		span.RecordError(fmt.Errorf("error looking up SRV record for _salty._tcp.%s : %s", a.Domain, err))
 	}
 
 	config, cap, err := fetchConfig(ctx, a.HashURI())
 	if err != nil {
 		// Fallback to plain user nick
+		span.RecordError(err)
+
 		config, cap, err = fetchConfig(ctx, a.URI())
 	}
 	if err != nil {
-		return fmt.Errorf("error looking up user %s: %w", a, err)
+		err = fmt.Errorf("error looking up user %s: %w", a, err)
+		span.RecordError(err)
+		return err
 	}
 	key, err := keys.NewEdX25519PublicKeyFromID(keys.ID(config.Key))
 	if err != nil {
-		return fmt.Errorf("error parsing public key %s: %w", config.Key, err)
+		err = fmt.Errorf("error parsing public key %s: %w", config.Key, err)
+		span.RecordError(err)
+		return err
 	}
 	a.key = key
 
 	u, err := url.Parse(config.Endpoint)
 	if err != nil {
-		return fmt.Errorf("error parsing endpoint %s: %w", config.Endpoint, err)
+		err = fmt.Errorf("error parsing endpoint %s: %w", config.Endpoint, err)
+		span.RecordError(err)
+		return err
 	}
 	a.endpoint = u
 	a.capabilities = cap

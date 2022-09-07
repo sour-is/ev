@@ -139,7 +139,7 @@ func (c *Cache[K, V]) ContainsOrAdd(ctx context.Context, key K, value V) (ok, ev
 // PeekOrAdd checks if a key is in the cache without updating the
 // recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *Cache[K, V]) PeekOrAdd(ctx context.Context, key K, value V) (previous interface{}, ok, evicted bool) {
+func (c *Cache[K, V]) PeekOrAdd(ctx context.Context, key K, value V) (previous *V, ok, evicted bool) {
 	var k K
 	var v V
 	c.lock.Lock()
