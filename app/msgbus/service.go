@@ -16,16 +16,19 @@ import (
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
+	"go.opentelemetry.io/otel/metric/instrument"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/multierr"
 )
 
 type service struct {
 	es *es.EventStore
 
-	Mresolver_posts            syncint64.Counter
-	Mresolver_post_added       syncint64.Counter
-	Mresolver_post_added_event syncint64.Counter
+	m_gql_posts            syncint64.Counter
+	m_gql_post_added       syncint64.Counter
+	m_gql_post_added_event syncint64.Counter
+	m_req_time             syncint64.Histogram
 }
 
 type MsgbusResolver interface {
@@ -50,13 +53,25 @@ func New(ctx context.Context, es *es.EventStore) (*service, error) {
 	svc := &service{es: es}
 
 	var err, errs error
-	svc.Mresolver_posts, err = m.SyncInt64().Counter("resolver_posts")
+	svc.m_gql_posts, err = m.SyncInt64().Counter("msgbus_posts",
+		instrument.WithDescription("msgbus graphql posts requests"),
+	)
 	errs = multierr.Append(errs, err)
 
-	svc.Mresolver_post_added, err = m.SyncInt64().Counter("resolver_post_added")
+	svc.m_gql_post_added, err = m.SyncInt64().Counter("msgbus_post_added",
+		instrument.WithDescription("msgbus graphql post added subcription requests"),
+	)
 	errs = multierr.Append(errs, err)
 
-	svc.Mresolver_post_added_event, err = m.SyncInt64().Counter("resolver_post_added")
+	svc.m_gql_post_added_event, err = m.SyncInt64().Counter("msgbus_post_event",
+		instrument.WithDescription("msgbus graphql post added subscription events"),
+	)
+	errs = multierr.Append(errs, err)
+
+	svc.m_req_time, err = m.SyncInt64().Histogram("msgbus_request_time",
+		instrument.WithDescription("msgbus graphql post added subscription events"),
+		instrument.WithUnit(unit.Unit("ns")),
+	)
 	errs = multierr.Append(errs, err)
 
 	span.RecordError(err)
@@ -76,8 +91,10 @@ func (s *service) RegisterHTTP(mux *http.ServeMux) {
 }
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+
 	r = r.WithContext(ctx)
 
 	switch r.Method {
@@ -96,13 +113,16 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Posts is the resolver for the events field.
-func (r *service) Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
+func (s *service) Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	r.Mresolver_posts.Add(ctx, 1)
+	s.m_gql_posts.Add(ctx, 1)
 
-	lis, err := r.es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
+	start := time.Now()
+	defer s.m_req_time.Record(ctx, time.Since(start).Milliseconds())
+
+	lis, err := s.es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
@@ -122,11 +142,11 @@ func (r *service) Posts(ctx context.Context, streamID string, paging *gql.PageIn
 	}
 
 	var first, last uint64
-	if first, err = r.es.FirstIndex(ctx, streamID); err != nil {
+	if first, err = s.es.FirstIndex(ctx, streamID); err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
-	if last, err = r.es.LastIndex(ctx, streamID); err != nil {
+	if last, err = s.es.LastIndex(ctx, streamID); err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
@@ -146,7 +166,7 @@ func (r *service) PostAdded(ctx context.Context, streamID string, after int64) (
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	r.Mresolver_post_added.Add(ctx, 1)
+	r.m_gql_post_added.Add(ctx, 1)
 
 	es := r.es.EventStream()
 	if es == nil {
@@ -183,7 +203,7 @@ func (r *service) PostAdded(ctx context.Context, streamID string, after int64) (
 				break
 			}
 			span.AddEvent(fmt.Sprintf("received %d events", len(events)))
-			r.Mresolver_post_added_event.Add(ctx, int64(len(events)))
+			r.m_gql_post_added_event.Add(ctx, int64(len(events)))
 
 			for _, e := range events {
 				if p, ok := e.(*PostEvent); ok {
@@ -203,8 +223,12 @@ func (r *service) PostAdded(ctx context.Context, streamID string, after int64) (
 
 func (s *service) get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	start := time.Now()
+	defer s.m_req_time.Record(ctx, time.Since(start).Milliseconds())
 
 	name, _, _ := strings.Cut(r.URL.Path, "/")
 	if name == "" {
@@ -259,6 +283,9 @@ func (s *service) post(w http.ResponseWriter, r *http.Request) {
 
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	start := time.Now()
+	defer s.m_req_time.Record(ctx, time.Since(start).Milliseconds())
 
 	name, tags, _ := strings.Cut(r.URL.Path, "/")
 	if name == "" {
