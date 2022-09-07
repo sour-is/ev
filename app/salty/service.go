@@ -17,7 +17,9 @@ import (
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
+	"go.opentelemetry.io/otel/metric/instrument"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/multierr"
 )
 
@@ -66,25 +68,40 @@ func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, erro
 	svc := &service{baseURL: baseURL, es: es, dns: net.DefaultResolver}
 
 	var err, errs error
-	svc.m_create_user, err = m.SyncInt64().Counter("salty_create_user")
+	svc.m_create_user, err = m.SyncInt64().Counter("salty_create_user",
+		instrument.WithDescription("salty create user graphql called"),
+	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_get_user, err = m.SyncInt64().Counter("salty_get_user")
+	svc.m_get_user, err = m.SyncInt64().Counter("salty_get_user",
+		instrument.WithDescription("salty get user graphql called"),
+	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_api_ping, err = m.SyncInt64().Counter("salty_api_ping")
+	svc.m_api_ping, err = m.SyncInt64().Counter("salty_api_ping",
+		instrument.WithDescription("salty api ping called"),
+	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_api_register, err = m.SyncInt64().Counter("salty_api_register")
+	svc.m_api_register, err = m.SyncInt64().Counter("salty_api_register",
+		instrument.WithDescription("salty api register"),
+	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_api_lookup, err = m.SyncInt64().Counter("salty_api_lookup")
+	svc.m_api_lookup, err = m.SyncInt64().Counter("salty_api_lookup",
+		instrument.WithDescription("salty api ping lookup"),
+	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_api_send, err = m.SyncInt64().Counter("salty_api_send")
+	svc.m_api_send, err = m.SyncInt64().Counter("salty_api_send",
+		instrument.WithDescription("salty api ping send"),
+	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_req_time, err = m.SyncInt64().Histogram("salty_request_time")
+	svc.m_req_time, err = m.SyncInt64().Histogram("salty_request_time",
+		instrument.WithDescription("histogram of requests"),
+		instrument.WithUnit(unit.Unit("ns")),
+	)
 	errs = multierr.Append(errs, err)
 
 	span.RecordError(err)
@@ -113,7 +130,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	start := time.Now()
-	defer s.m_req_time.Record(ctx, int64(time.Since(start)))
+	defer s.m_req_time.Record(ctx, time.Since(start).Milliseconds())
 
 	addr := "saltyuser-" + strings.TrimPrefix(r.URL.Path, "/.well-known/salty/")
 	addr = strings.TrimSuffix(addr, ".json")
@@ -152,6 +169,8 @@ func (s *service) CreateSaltyUser(ctx context.Context, nick string, pub string) 
 	defer span.End()
 
 	s.m_create_user.Add(ctx, 1)
+	start := time.Now()
+	defer s.m_req_time.Record(ctx, time.Since(start).Milliseconds())
 
 	streamID := fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
 	span.AddEvent(streamID)
@@ -182,6 +201,8 @@ func (s *service) SaltyUser(ctx context.Context, nick string) (*SaltyUser, error
 	defer span.End()
 
 	s.m_get_user.Add(ctx, 1)
+	start := time.Now()
+	defer s.m_req_time.Record(ctx, time.Since(start).Milliseconds())
 
 	streamID := fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
 	span.AddEvent(streamID)
@@ -213,6 +234,9 @@ func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	start := time.Now()
+	defer s.m_req_time.Record(ctx, time.Since(start).Nanoseconds())
 
 	switch r.Method {
 	case http.MethodGet:

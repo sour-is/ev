@@ -49,7 +49,9 @@ func initMetrics(ctx context.Context, name string) (context.Context, func() erro
 	}
 
 	config := prometheus.Config{
-		DefaultHistogramBoundaries: []float64{1, 2, 5, 10, 20, 50},
+		DefaultHistogramBoundaries: []float64{
+			2 << 6, 2 << 8, 2 << 10, 2 << 12, 2 << 14, 2 << 16, 2 << 18, 2 << 20, 2 << 22, 2 << 24, 2 << 26, 2 << 28,
+		},
 	}
 	cont := controller.New(
 		processor.NewFactory(
