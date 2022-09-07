@@ -4,9 +4,9 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
-	"path"
 	"strings"
 	"time"
 
@@ -81,7 +81,13 @@ func run(ctx context.Context) error {
 
 		if enable.Has("salty") {
 			span.AddEvent("Enable Salty")
-			salty, err := salty.New(ctx, es, path.Join(env("EV_BASE_URL", "http://"+s.Addr), "inbox"))
+			base, err := url.JoinPath(env("EV_BASE_URL", "http://"+s.Addr), "inbox")
+			if err != nil {
+				span.RecordError(err)
+				return err
+			}
+
+			salty, err := salty.New(ctx, es, base)
 			if err != nil {
 				span.RecordError(err)
 				return err

@@ -2267,7 +2267,7 @@ func (ec *executionContext) _SaltyUser_endpoint(ctx context.Context, field graph
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Endpoint(ctx), nil
+		return obj.Endpoint(ctx)
 	})
 	if err != nil {
 		ec.Error(ctx, err)

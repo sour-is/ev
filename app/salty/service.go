@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"path"
+	"net/url"
 	"strings"
 
 	"github.com/keys-pub/keys"
@@ -124,12 +124,14 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	basePath, _ := url.JoinPath(s.baseURL, a.inbox.String())
+
 	err = json.NewEncoder(w).Encode(
 		struct {
 			Endpoint string `json:"endpoint"`
 			Key      string `json:"key"`
 		}{
-			Endpoint: path.Join(s.baseURL, a.inbox.String()),
+			Endpoint: basePath,
 			Key:      a.pubkey.ID().String(),
 		})
 	if err != nil {
