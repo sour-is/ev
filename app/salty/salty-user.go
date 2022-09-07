@@ -6,8 +6,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
-	"path"
+	"net/url"
 	"strings"
+
 
 	"github.com/keys-pub/keys"
 	"github.com/oklog/ulid/v2"
@@ -52,9 +53,9 @@ func (a *SaltyUser) OnUserRegister(name string, pubkey *keys.EdX25519PublicKey) 
 func (a *SaltyUser) Nick() string   { return a.name }
 func (a *SaltyUser) Inbox() string  { return a.inbox.String() }
 func (a *SaltyUser) Pubkey() string { return a.pubkey.String() }
-func (s *SaltyUser) Endpoint(ctx context.Context) string {
+func (s *SaltyUser) Endpoint(ctx context.Context) (string, error) {
 	svc := gql.FromContext[contextKey, *service](ctx, saltyKey)
-	return path.Join(svc.BaseURL(), s.inbox.String())
+	return url.JoinPath(svc.BaseURL(), s.inbox.String())
 }
 
 type UserRegistered struct {
