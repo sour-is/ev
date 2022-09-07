@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/keys-pub/keys"
 	"github.com/sour-is/ev/internal/lg"
@@ -35,6 +36,7 @@ type service struct {
 	m_api_register syncint64.Counter
 	m_api_lookup   syncint64.Counter
 	m_api_send     syncint64.Counter
+	m_req_time     syncint64.Histogram
 }
 type contextKey struct {
 	name string
@@ -81,6 +83,10 @@ func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, erro
 
 	svc.m_api_send, err = m.SyncInt64().Counter("salty_api_send")
 	errs = multierr.Append(errs, err)
+
+	svc.m_req_time, err = m.SyncInt64().Histogram("salty_request_time")
+	errs = multierr.Append(errs, err)
+
 	span.RecordError(err)
 
 	return svc, errs
@@ -105,6 +111,9 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	start := time.Now()
+	defer s.m_req_time.Record(ctx, int64(time.Since(start)))
 
 	addr := "saltyuser-" + strings.TrimPrefix(r.URL.Path, "/.well-known/salty/")
 	addr = strings.TrimSuffix(addr, ".json")
@@ -209,10 +218,14 @@ func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		switch {
 		case r.URL.Path == "/ping":
+			s.m_api_ping.Add(ctx, 1)
+
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{}`))
 
 		case strings.HasPrefix(r.URL.Path, "/lookup/"):
+			s.m_api_lookup.Add(ctx, 1)
+
 			addr, err := s.ParseAddr(strings.TrimPrefix(r.URL.Path, "/lookup/"))
 			if err != nil {
 				span.RecordError(err)
@@ -226,7 +239,8 @@ func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			json.NewEncoder(w).Encode(addr)
+			err = json.NewEncoder(w).Encode(addr)
+			span.RecordError(err)
 			return
 
 		default:
@@ -237,8 +251,14 @@ func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		switch r.URL.Path {
 		case "/register":
+			s.m_api_register.Add(ctx, 1)
+			notImplemented(w)
+			return
 
 		case "/send":
+			s.m_api_send.Add(ctx, 1)
+			notImplemented(w)
+			return
 
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -248,4 +268,8 @@ func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+}
+
+func notImplemented(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNotImplemented)
 }
