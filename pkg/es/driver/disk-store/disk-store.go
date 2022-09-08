@@ -111,10 +111,12 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 	}
 	logs := &openlogs{logs: c}
 	return &diskStore{
-		path:        path,
-		openlogs:    locker.New(logs),
+		path:         path,
+		openlogs:     locker.New(logs),
 		m_disk_open:  d.m_disk_open,
 		m_disk_evict: d.m_disk_evict,
+		m_disk_read:  d.m_disk_read,
+		m_disk_write: d.m_disk_write,
 	}, nil
 }
 func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
@@ -147,9 +149,9 @@ func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.Event
 }
 
 type eventLog struct {
-	streamID string
-	events   *locker.Locked[wal.Log]
-	diskStore *diskStore   
+	streamID  string
+	events    *locker.Locked[wal.Log]
+	diskStore *diskStore
 }
 
 var _ driver.EventLog = (*eventLog)(nil)

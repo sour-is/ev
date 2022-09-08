@@ -60,7 +60,12 @@ func run(ctx context.Context) error {
 			return err
 		}
 
-		es, err := es.Open(ctx, env("EV_DATA", "mem:"), streamer.New(ctx), projecter.New(ctx))
+		es, err := es.Open(
+			ctx, 
+			env("EV_DATA", "mem:"), 
+			streamer.New(ctx), 
+			projecter.New(ctx, projecter.DefaultProjection),
+		)
 		if err != nil {
 			span.RecordError(err)
 			return err

@@ -11,11 +11,12 @@ import (
 )
 
 type projector struct {
-	up driver.Driver
+	up  driver.Driver
+	fns []func(event.Event) []event.Event
 }
 
-func New(ctx context.Context) *projector {
-	return &projector{}
+func New(ctx context.Context, fns ...func(event.Event) []event.Event) *projector {
+	return &projector{fns: fns}
 }
 func (p *projector) Apply(e *es.EventStore) {
 	p.up = e.Driver
@@ -70,27 +71,13 @@ func (w *wrapper) Append(ctx context.Context, events event.Events, version uint6
 
 			for i := range events {
 				e := events[i]
-				eventType := event.TypeOf(e)
-				m := e.EventMeta()
-				streamID := m.StreamID
-				streamPos := m.Position
 
-				e1 := event.NewPtr(streamID, streamPos)
-				event.SetStreamID("$all", e1)
-
-				e2 := event.NewPtr(streamID, streamPos)
-				event.SetStreamID("$type-"+eventType, e2)
-
-				e3 := event.NewPtr(streamID, streamPos)
-				pkg, _, _ := strings.Cut(eventType, ".")
-				event.SetStreamID("$pkg-"+pkg, e3)
-
-				pevents = append(
-					pevents,
-					e1,
-					e2,
-					e3,
-				)
+				for _, fn := range w.projector.fns {
+					pevents = append(
+						pevents,
+						fn(e)...,
+					)
+				}
 			}
 
 			for i := range pevents {
@@ -125,4 +112,23 @@ func (w *wrapper) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(
 	defer span.End()
 
 	return w.up.LoadForUpdate(ctx, a, fn)
+}
+
+func DefaultProjection(e event.Event) []event.Event {
+	eventType := event.TypeOf(e)
+	m := e.EventMeta()
+	streamID := m.StreamID
+	streamPos := m.Position
+
+	e1 := event.NewPtr(streamID, streamPos)
+	event.SetStreamID("$all", e1)
+
+	e2 := event.NewPtr(streamID, streamPos)
+	event.SetStreamID("$type-"+eventType, e2)
+
+	e3 := event.NewPtr(streamID, streamPos)
+	pkg, _, _ := strings.Cut(eventType, ".")
+	event.SetStreamID("$pkg-"+pkg, e3)
+
+	return []event.Event{e1, e2, e3}
 }
