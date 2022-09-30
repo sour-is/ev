@@ -16,7 +16,8 @@ type EventLog interface {
 	Append(ctx context.Context, events event.Events, version uint64) (uint64, error)
 	FirstIndex(context.Context) (uint64, error)
 	LastIndex(context.Context) (uint64, error)
-
+}
+type EventLogWithUpdate interface {
 	LoadForUpdate(context.Context, event.Aggregate, func(context.Context, event.Aggregate) error) (uint64, error)
 }
 

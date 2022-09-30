@@ -182,7 +182,14 @@ func (w *wrapper) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	return w.up.LoadForUpdate(ctx, a, fn)
+	up := w.up
+	for up != nil {
+		if up, ok := up.(driver.EventLogWithUpdate); ok {
+			return up.LoadForUpdate(ctx, a, fn)
+		}
+		up = es.Unwrap(up)
+	}
+	return 0, es.ErrNoDriver
 }
 
 type position struct {
