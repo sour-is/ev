@@ -80,9 +80,20 @@ func TestProjecter(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
+	var events []event.Event
+
+	wait := make(chan struct{})
+
 	mockEL := &mockEventLog{}
 	mockEL.onRead = func(ctx context.Context, i1, i2 int64) (event.Events, error) {
 		return event.NewEvents(), nil
+	}
+	mockEL.onAppend = func(ctx context.Context, e event.Events, u uint64) (uint64, error) {
+		events = append(events, e...)
+		if wait != nil && len(events) > 3 {
+			close(wait)
+		}
+		return uint64(len(e)), nil
 	}
 
 	mock := &mockDriver{}
@@ -107,4 +118,12 @@ func TestProjecter(t *testing.T) {
 	_, err = es.Read(ctx, "test", 0, 1)
 
 	is.NoErr(err)
+
+	_, err = es.Append(ctx, "test", event.NewEvents(event.NilEvent))
+	is.NoErr(err)
+
+	<-wait
+
+	is.Equal(len(events), 4)
+
 }

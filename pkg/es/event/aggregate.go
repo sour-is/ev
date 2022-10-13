@@ -6,6 +6,8 @@ import (
 	"sync"
 )
 
+// Aggregate implements functionality for working with event store streams as an aggregate.
+// When creating a new Aggregate the struct should have an ApplyEvent method and embed the AggregateRoot.
 type Aggregate interface {
 	// ApplyEvent  applies the event to the aggrigate state
 	ApplyEvent(...Event)

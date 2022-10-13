@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 
-
 	"github.com/keys-pub/keys"
 	"github.com/oklog/ulid/v2"
 	"github.com/sour-is/ev/pkg/es/event"
@@ -46,6 +45,10 @@ func (a *SaltyUser) streamID() string {
 }
 
 func (a *SaltyUser) OnUserRegister(name string, pubkey *keys.EdX25519PublicKey) error {
+	if err := event.NotExists(a); err != nil {
+		return err
+	}
+
 	event.Raise(a, &UserRegistered{Name: name, Pubkey: pubkey})
 	return nil
 }
@@ -97,4 +100,11 @@ func (e *UserRegistered) UnmarshalBinary(b []byte) error {
 	e.Pubkey, err = keys.NewEdX25519PublicKeyFromID(keys.ID(pub))
 
 	return err
+}
+
+func NickToStreamID(nick string) string {
+	return fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
+}
+func HashToStreamID(hash string) string {
+	return fmt.Sprint("saltyuser-", hash)
 }

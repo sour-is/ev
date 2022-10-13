@@ -1,3 +1,4 @@
+// package projecter provides a driver middleware to derive new events from other events.
 package projecter
 
 import (

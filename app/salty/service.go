@@ -12,15 +12,17 @@ import (
 	"strings"
 	"time"
 
+	"go.mills.io/saltyim"
+	"go.opentelemetry.io/otel/metric/instrument"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.opentelemetry.io/otel/metric/unit"
+	"go.uber.org/multierr"
+
 	"github.com/keys-pub/keys"
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
-	"go.opentelemetry.io/otel/metric/instrument"
-	"go.opentelemetry.io/otel/metric/instrument/syncint64"
-	"go.opentelemetry.io/otel/metric/unit"
-	"go.uber.org/multierr"
 )
 
 type DNSResolver interface {
@@ -172,8 +174,14 @@ func (s *service) CreateSaltyUser(ctx context.Context, nick string, pub string) 
 	start := time.Now()
 	defer s.m_req_time.Record(ctx, time.Since(start).Milliseconds())
 
-	streamID := fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
+	streamID := NickToStreamID(nick)
 	span.AddEvent(streamID)
+
+	return s.createSaltyUser(ctx, nick, streamID, pub)
+}
+func (s *service) createSaltyUser(ctx context.Context, nick, streamID, pub string) (*SaltyUser, error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
 
 	key, err := keys.NewEdX25519PublicKeyFromID(keys.ID(pub))
 	if err != nil {
@@ -276,12 +284,62 @@ func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/register":
 			s.m_api_register.Add(ctx, 1)
-			notImplemented(w)
+
+			req, signer, err := saltyim.NewRegisterRequest(r.Body)
+			if err != nil {
+				span.RecordError(fmt.Errorf("error parsing register request: %w", err))
+				http.Error(w, "Bad Request", http.StatusBadRequest)
+				return
+			}
+			if signer != req.Key {
+				http.Error(w, "Bad Request", http.StatusBadRequest)
+				return
+			}
+
+			_, err = s.createSaltyUser(ctx, "", HashToStreamID(req.Hash), req.Key)
+			if errors.Is(err, event.ErrShouldNotExist) {
+				http.Error(w, "Already Exists", http.StatusConflict)
+			} else if err != nil {
+				http.Error(w, "Error", http.StatusInternalServerError)
+			}
+
+
+			http.Error(w, "Endpoint Created", http.StatusCreated)
 			return
 
 		case "/send":
 			s.m_api_send.Add(ctx, 1)
-			notImplemented(w)
+
+			req, signer, err := saltyim.NewSendRequest(r.Body)
+			if err != nil {
+				span.RecordError(fmt.Errorf("error parsing send request: %w", err))
+				http.Error(w, "Bad Request", http.StatusBadRequest)
+				return
+			}
+			// TODO: Do something with signer?
+			span.AddEvent(fmt.Sprintf("request signed by %s", signer))
+
+			u, err := url.Parse(req.Endpoint)
+			if err != nil {
+				span.RecordError(fmt.Errorf("error parsing endpoint %s: %w", req.Endpoint, err))
+				http.Error(w, "Bad Endpoint", http.StatusBadRequest)
+				return
+			}
+			if !u.IsAbs() {
+				span.RecordError(fmt.Errorf("endpoint %s is not an absolute uri: %w", req.Endpoint, err))
+				http.Error(w, "Bad Endpoint", http.StatusBadRequest)
+				return
+			}
+
+			// TODO: Queue up an internal retry and return immediately on failure?
+			if err := saltyim.Send(req.Endpoint, req.Message, req.Capabilities); err != nil {
+				span.RecordError(fmt.Errorf("error sending message to %s: %w", req.Endpoint, err))
+				http.Error(w, "Send Error", http.StatusInternalServerError)
+				return
+			}
+
+			http.Error(w, "Message Accepted", http.StatusAccepted)
+
 			return
 
 		default:
@@ -292,8 +350,4 @@ func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-}
-
-func notImplemented(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusNotImplemented)
 }

@@ -1,3 +1,5 @@
+// package diskstore provides a driver that reads and writes events to disk. 
+
 package diskstore
 
 import (

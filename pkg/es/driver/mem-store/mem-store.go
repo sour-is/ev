@@ -1,3 +1,4 @@
+// package memstore provides a driver that reads and writes events to memory.
 package memstore
 
 import (

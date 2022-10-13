@@ -1,3 +1,4 @@
+// package streamer provides a driver to allow awaiting for new events to be added to a stream.
 package streamer
 
 import (

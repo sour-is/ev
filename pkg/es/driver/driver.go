@@ -1,3 +1,4 @@
+// package driver defines interfaces to be used by driver implementations.
 package driver
 
 import (

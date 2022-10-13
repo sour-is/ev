@@ -1,3 +1,4 @@
+// package event implements functionality for working with an eventstore.
 package event
 
 import (
@@ -28,6 +29,7 @@ func getULID() ulid.ULID {
 	return ulid.MustNew(ulid.Now(), entropy)
 }
 
+// Event implements functionality of an individual event used with the event store. It should implement the getter/setter for EventMeta and BinaryMarshaler/BinaryUnmarshaler.
 type Event interface {
 	EventMeta() Meta
 	SetEventMeta(Meta)
