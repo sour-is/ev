@@ -37,8 +37,3 @@ endif
 EV_HOST?=localhost:8080
 load:
 	watch -n .1 "http POST $(EV_HOST)/inbox/asdf/test a=b one=1 two:='{\"v\":2}' | jq"
-
-bi:
-	go build .
-	sudo mv ev /usr/local/bin/
-	sudo systemctl restart ev
