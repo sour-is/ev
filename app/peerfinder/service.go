@@ -127,10 +127,13 @@ func (s *service) getPending(w http.ResponseWriter, r *http.Request, uuid string
 	}
 
 	span.AddEvent(negotiated.String())
-	switch negotiated.String() {
+	mime := negotiated.String()
+	switch mime {
 	case "text/environment":
+		w.Header().Set("content-type", negotiated.String())
 		_, err = encodeTo(w, info.MarshalEnviron, req.MarshalEnviron)
 	case "application/json":
+		w.Header().Set("content-type", negotiated.String())
 		var out interface{} = info
 		if req != nil {
 			out = struct {

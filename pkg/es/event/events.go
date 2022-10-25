@@ -79,7 +79,7 @@ func (lis Events) Last() Event {
 	return lis[len(lis)-1]
 }
 
-func TypeOf(e Event) string {
+func TypeOf(e any) string {
 	if ie, ok := e.(interface{ UnwrapEvent() Event }); ok {
 		e = ie.UnwrapEvent()
 	}

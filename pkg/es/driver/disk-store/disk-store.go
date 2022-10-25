@@ -1,4 +1,4 @@
-// package diskstore provides a driver that reads and writes events to disk. 
+// package diskstore provides a driver that reads and writes events to disk.
 
 package diskstore
 
@@ -176,7 +176,9 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 		}
 
 		if version != AppendOnly && version != last {
-			return fmt.Errorf("%w: current version wrong %d != %d", es.ErrWrongVersion, version, last)
+			err = fmt.Errorf("%w: current version wrong %d != %d", es.ErrWrongVersion, version, last)
+			span.RecordError(err)
+			return err
 		}
 
 		var b []byte
@@ -202,6 +204,7 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 
 		return l.WriteBatch(batch)
 	})
+	span.RecordError(err)
 
 	return count, err
 }

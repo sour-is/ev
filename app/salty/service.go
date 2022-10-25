@@ -177,9 +177,9 @@ func (s *service) CreateSaltyUser(ctx context.Context, nick string, pub string) 
 	streamID := NickToStreamID(nick)
 	span.AddEvent(streamID)
 
-	return s.createSaltyUser(ctx, nick, streamID, pub)
+	return s.createSaltyUser(ctx, streamID, pub)
 }
-func (s *service) createSaltyUser(ctx context.Context, nick, streamID, pub string) (*SaltyUser, error) {
+func (s *service) createSaltyUser(ctx context.Context, streamID, pub string) (*SaltyUser, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
@@ -190,16 +190,16 @@ func (s *service) createSaltyUser(ctx context.Context, nick, streamID, pub strin
 	}
 
 	a, err := es.Create(ctx, s.es, streamID, func(ctx context.Context, agg *SaltyUser) error {
-		return agg.OnUserRegister(nick, key)
+		return agg.OnUserRegister(key)
 	})
 	switch {
 	case errors.Is(err, es.ErrShouldNotExist):
 		span.RecordError(err)
-		return nil, fmt.Errorf("user exists")
+		return nil, fmt.Errorf("user exists: %w", err)
 
 	case err != nil:
 		span.RecordError(err)
-		return nil, fmt.Errorf("internal error")
+		return nil, fmt.Errorf("internal error: %w", err)
 	}
 
 	return a, nil
@@ -296,13 +296,14 @@ func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			_, err = s.createSaltyUser(ctx, "", HashToStreamID(req.Hash), req.Key)
+			_, err = s.createSaltyUser(ctx, HashToStreamID(req.Hash), req.Key)
 			if errors.Is(err, event.ErrShouldNotExist) {
 				http.Error(w, "Already Exists", http.StatusConflict)
+				return
 			} else if err != nil {
 				http.Error(w, "Error", http.StatusInternalServerError)
+				return
 			}
-
 
 			http.Error(w, "Endpoint Created", http.StatusCreated)
 			return

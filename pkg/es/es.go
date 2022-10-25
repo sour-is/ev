@@ -11,6 +11,7 @@ import (
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
 	"go.uber.org/multierr"
 )
@@ -77,6 +78,8 @@ func Open(ctx context.Context, dsn string, options ...Option) (*EventStore, erro
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
+	span.SetAttributes(attribute.String("dsn", dsn))
+
 	name, _, ok := strings.Cut(dsn, ":")
 	if !ok {
 		return nil, fmt.Errorf("%w: no scheme", ErrNoDriver)
@@ -119,6 +122,11 @@ func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, er
 	}
 
 	Mes_save.Add(ctx, 1)
+	span.SetAttributes(
+		attribute.String("agg.type", event.TypeOf(agg)),
+		attribute.String("agg.streamID", agg.StreamID()),
+		attribute.Int64("agg.version", int64(agg.StreamVersion())),
+	)
 
 	l, err := es.EventLog(ctx, agg.StreamID())
 	if err != nil {
@@ -139,6 +147,11 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 
 	Mes_load.Add(ctx, 1)
 
+	span.SetAttributes(
+		attribute.String("agg.type", event.TypeOf(agg)),
+		attribute.String("agg.streamID", agg.StreamID()),
+	)
+
 	l, err := es.Driver.EventLog(ctx, agg.StreamID())
 	if err != nil {
 		return err
@@ -151,6 +164,10 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 
 	event.Append(agg, events...)
 
+	span.SetAttributes(
+		attribute.Int64("agg.version", int64(agg.StreamVersion())),
+	)
+
 	return nil
 }
 func (es *EventStore) Read(ctx context.Context, streamID string, pos, count int64) (event.Events, error) {
@@ -158,6 +175,9 @@ func (es *EventStore) Read(ctx context.Context, streamID string, pos, count int6
 	defer span.End()
 
 	Mes_read.Add(ctx, 1)
+	span.SetAttributes(
+		attribute.String("ev.streamID", streamID),
+	)
 
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
@@ -170,6 +190,9 @@ func (es *EventStore) Append(ctx context.Context, streamID string, events event.
 	defer span.End()
 
 	Mes_append.Add(ctx, 1)
+	span.SetAttributes(
+		attribute.String("ev.streamID", streamID),
+	)
 
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
@@ -242,6 +265,9 @@ func Create[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 
 	agg = new(A)
 	agg.SetStreamID(streamID)
+	span.SetAttributes(
+		attribute.String("agg.streamID", streamID),
+	)
 
 	if err = es.Load(ctx, agg); err != nil {
 		return
@@ -272,6 +298,9 @@ func Update[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 
 	agg = new(A)
 	agg.SetStreamID(streamID)
+	span.SetAttributes(
+		attribute.String("agg.streamID", streamID),
+	)
 
 	if err = es.Load(ctx, agg); err != nil {
 		return
@@ -299,6 +328,9 @@ func Upsert[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 
 	agg = new(A)
 	agg.SetStreamID(streamID)
+	span.SetAttributes(
+		attribute.String("agg.streamID", streamID),
+	)
 
 	if err = es.Load(ctx, agg); err != nil {
 		return

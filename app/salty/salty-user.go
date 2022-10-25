@@ -16,7 +16,6 @@ import (
 )
 
 type SaltyUser struct {
-	name   string
 	pubkey *keys.EdX25519PublicKey
 	inbox  ulid.ULID
 
@@ -30,30 +29,25 @@ func (a *SaltyUser) ApplyEvent(lis ...event.Event) {
 	for _, e := range lis {
 		switch e := e.(type) {
 		case *UserRegistered:
-			a.name = e.Name
+			// a.name = e.Name
 			a.pubkey = e.Pubkey
 			a.inbox = e.EventMeta().EventID
-			a.SetStreamID(a.streamID())
+			// a.SetStreamID(a.streamID())
 		default:
 			log.Printf("unknown event %T", e)
 		}
 	}
 }
 
-func (a *SaltyUser) streamID() string {
-	return fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(a.name))))
-}
-
-func (a *SaltyUser) OnUserRegister(name string, pubkey *keys.EdX25519PublicKey) error {
+func (a *SaltyUser) OnUserRegister(pubkey *keys.EdX25519PublicKey) error {
 	if err := event.NotExists(a); err != nil {
 		return err
 	}
 
-	event.Raise(a, &UserRegistered{Name: name, Pubkey: pubkey})
+	event.Raise(a, &UserRegistered{Pubkey: pubkey})
 	return nil
 }
 
-func (a *SaltyUser) Nick() string   { return a.name }
 func (a *SaltyUser) Inbox() string  { return a.inbox.String() }
 func (a *SaltyUser) Pubkey() string { return a.pubkey.String() }
 func (s *SaltyUser) Endpoint(ctx context.Context) (string, error) {

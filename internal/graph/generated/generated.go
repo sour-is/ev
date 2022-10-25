@@ -101,7 +101,6 @@ type ComplexityRoot struct {
 	SaltyUser struct {
 		Endpoint func(childComplexity int) int
 		Inbox    func(childComplexity int) int
-		Nick     func(childComplexity int) int
 		Pubkey   func(childComplexity int) int
 	}
 
@@ -352,13 +351,6 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.SaltyUser.Inbox(childComplexity), true
 
-	case "SaltyUser.nick":
-		if e.complexity.SaltyUser.Nick == nil {
-			break
-		}
-
-		return e.complexity.SaltyUser.Nick(childComplexity), true
-
 	case "SaltyUser.pubkey":
 		if e.complexity.SaltyUser.Pubkey == nil {
 			break
@@ -568,7 +560,6 @@ extend type Mutation {
 }
 
 type SaltyUser @goModel(model: "github.com/sour-is/ev/app/salty.SaltyUser"){
-    nick:     String!
     pubkey:   String!
     inbox:    String!
     endpoint: String!
@@ -1328,8 +1319,6 @@ func (ec *executionContext) fieldContext_Mutation_createSaltyUser(ctx context.Co
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "nick":
-				return ec.fieldContext_SaltyUser_nick(ctx, field)
 			case "pubkey":
 				return ec.fieldContext_SaltyUser_pubkey(ctx, field)
 			case "inbox":
@@ -1918,8 +1907,6 @@ func (ec *executionContext) fieldContext_Query_saltyUser(ctx context.Context, fi
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "nick":
-				return ec.fieldContext_SaltyUser_nick(ctx, field)
 			case "pubkey":
 				return ec.fieldContext_SaltyUser_pubkey(ctx, field)
 			case "inbox":
@@ -2116,50 +2103,6 @@ func (ec *executionContext) fieldContext_Query___schema(ctx context.Context, fie
 				return ec.fieldContext___Schema_directives(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SaltyUser_nick(ctx context.Context, field graphql.CollectedField, obj *salty.SaltyUser) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_SaltyUser_nick(ctx, field)
-	if err != nil {
-		return graphql.Null
-	}
-	ctx = graphql.WithFieldContext(ctx, fc)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = graphql.Null
-		}
-	}()
-	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return obj.Nick(), nil
-	})
-	if err != nil {
-		ec.Error(ctx, err)
-		return graphql.Null
-	}
-	if resTmp == nil {
-		if !graphql.HasFieldError(ctx, fc) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.(string)
-	fc.Result = res
-	return ec.marshalNString2string(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) fieldContext_SaltyUser_nick(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SaltyUser",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -4772,13 +4715,6 @@ func (ec *executionContext) _SaltyUser(ctx context.Context, sel ast.SelectionSet
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("SaltyUser")
-		case "nick":
-
-			out.Values[i] = ec._SaltyUser_nick(ctx, field, obj)
-
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&invalids, 1)
-			}
 		case "pubkey":
 
 			out.Values[i] = ec._SaltyUser_pubkey(ctx, field, obj)
