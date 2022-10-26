@@ -142,11 +142,11 @@ type wrapper struct {
 
 var _ driver.EventLog = (*wrapper)(nil)
 
-func (w *wrapper) Read(ctx context.Context, pos int64, count int64) (event.Events, error) {
+func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	return w.up.Read(ctx, pos, count)
+	return w.up.Read(ctx, after, count)
 }
 func (w *wrapper) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
 	ctx, span := lg.Span(ctx)

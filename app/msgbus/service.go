@@ -476,8 +476,8 @@ func (e *PostEvent) Values() any {
 	}
 
 	return struct {
-		Payload []byte
-		Tags    []string
+		Payload []byte   `json:"payload"`
+		Tags    []string `json:"tags,omitempty"`
 	}{
 		Payload: e.payload,
 		Tags:    e.tags,

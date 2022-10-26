@@ -13,7 +13,7 @@ type Driver interface {
 }
 
 type EventLog interface {
-	Read(ctx context.Context, pos, count int64) (event.Events, error)
+	Read(ctx context.Context, after, count int64) (event.Events, error)
 	Append(ctx context.Context, events event.Events, version uint64) (uint64, error)
 	FirstIndex(context.Context) (uint64, error)
 	LastIndex(context.Context) (uint64, error)

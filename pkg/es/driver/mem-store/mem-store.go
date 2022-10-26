@@ -112,7 +112,7 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 }
 
 // Read implements driver.EventStore
-func (m *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Events, error) {
+func (m *eventLog) Read(ctx context.Context, after int64, count int64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
@@ -131,11 +131,11 @@ func (m *eventLog) Read(ctx context.Context, pos int64, count int64) (event.Even
 			return nil
 		}
 
-		start, count := math.PagerBox(first, last, pos, count)
+		start, count := math.PagerBox(first, last, after, count)
 		if count == 0 {
 			return nil
 		}
-		span.AddEvent(fmt.Sprint("box", first, last, pos, count))
+		span.AddEvent(fmt.Sprint("box", first, last, after, count))
 		events = make([]event.Event, math.Abs(count))
 		for i := range events {
 			span.AddEvent(fmt.Sprintf("read event %d of %d", i, math.Abs(count)))

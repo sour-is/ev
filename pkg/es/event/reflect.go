@@ -261,11 +261,30 @@ func Values(e Event) map[string]any {
 			continue
 		}
 
+		omitempty := false
 		field := v.FieldByIndex(idx.Index)
 
 		name := idx.Name
 		if n, ok := idx.Tag.Lookup("json"); ok {
-			name = n
+			var (
+				opt   string
+				found bool
+			)
+
+			name, opt, found = strings.Cut(n, ",")
+			if name == "-" {
+				continue
+			}
+
+			if found {
+				if strings.Contains(opt, "omitempty") {
+					omitempty = true
+				}
+			}
+		}
+
+		if omitempty && field.IsZero() {
+			continue
 		}
 
 		m[name] = field.Interface()

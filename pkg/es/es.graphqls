@@ -20,5 +20,9 @@ type Event implements Edge @goModel(model: "github.com/sour-is/ev/pkg/es.GQLEven
     eventID: String!
     values: Map!
     bytes: String!
+    type: String!
+    created: Time!
     meta: Meta!
+
+    linked: Event
 }

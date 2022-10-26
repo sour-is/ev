@@ -121,7 +121,6 @@ func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, er
 		return 0, nil
 	}
 
-	Mes_save.Add(ctx, 1)
 	span.SetAttributes(
 		attribute.String("agg.type", event.TypeOf(agg)),
 		attribute.String("agg.streamID", agg.StreamID()),
@@ -137,6 +136,7 @@ func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, er
 	if err != nil {
 		return 0, err
 	}
+	Mes_save.Add(ctx, int64(count))
 
 	agg.Commit()
 	return count, err
@@ -144,8 +144,6 @@ func (es *EventStore) Save(ctx context.Context, agg event.Aggregate) (uint64, er
 func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
-
-	Mes_load.Add(ctx, 1)
 
 	span.SetAttributes(
 		attribute.String("agg.type", event.TypeOf(agg)),
@@ -162,6 +160,7 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 		return err
 	}
 
+	Mes_load.Add(ctx, events.Count())
 	event.Append(agg, events...)
 
 	span.SetAttributes(
@@ -170,20 +169,25 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 
 	return nil
 }
-func (es *EventStore) Read(ctx context.Context, streamID string, pos, count int64) (event.Events, error) {
+func (es *EventStore) Read(ctx context.Context, streamID string, after, count int64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	Mes_read.Add(ctx, 1)
 	span.SetAttributes(
-		attribute.String("ev.streamID", streamID),
+		attribute.String("streamID", streamID),
+		attribute.Int64("after", after),
+		attribute.Int64("count", count),
 	)
 
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
 		return nil, err
 	}
-	return l.Read(ctx, pos, count)
+
+	events, err := l.Read(ctx, after, count)
+	Mes_read.Add(ctx, events.Count())
+
+	return events, err
 }
 func (es *EventStore) Append(ctx context.Context, streamID string, events event.Events) (uint64, error) {
 	ctx, span := lg.Span(ctx)
@@ -203,6 +207,9 @@ func (es *EventStore) Append(ctx context.Context, streamID string, events event.
 func (es *EventStore) FirstIndex(ctx context.Context, streamID string) (uint64, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+	span.SetAttributes(
+		attribute.String("ev.streamID", streamID),
+	)
 
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
@@ -213,6 +220,9 @@ func (es *EventStore) FirstIndex(ctx context.Context, streamID string) (uint64, 
 func (es *EventStore) LastIndex(ctx context.Context, streamID string) (uint64, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+	span.SetAttributes(
+		attribute.String("ev.streamID", streamID),
+	)
 
 	l, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
@@ -248,6 +258,7 @@ var ErrNoDriver = errors.New("no driver")
 var ErrWrongVersion = errors.New("wrong version")
 var ErrShouldExist = event.ErrShouldExist
 var ErrShouldNotExist = event.ErrShouldNotExist
+var ErrNotFound = errors.New("not found")
 
 type PA[T any] interface {
 	event.Aggregate

@@ -38,19 +38,30 @@ type PageInfo struct {
 }
 
 type PageInput struct {
-	Idx   *int64 `json:"idx"`
-	Count *int64 `json:"count"`
+	After  *int64 `json:"after"`
+	Before *int64 `json:"before"`
+	Count  *int64 `json:"count"`
 }
 
 func (p *PageInput) GetIdx(v int64) int64 {
-	if p == nil || p.Idx == nil {
-		return v
+	if p == nil {
+		// pass
+	} else if p.Before != nil {
+		return (*p.Before)
+	} else if p.After != nil {
+		return *p.After
 	}
-	return *p.Idx
+
+	return v
 }
 func (p *PageInput) GetCount(v int64) int64 {
 	if p == nil || p.Count == nil {
 		return v
+	} else if p.Before != nil {
+		return -(*p.Count)
+	} else if p.After != nil {
+		return *p.Count
 	}
+
 	return *p.Count
 }

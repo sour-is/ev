@@ -4,6 +4,7 @@ package diskstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -208,7 +209,7 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 
 	return count, err
 }
-func (e *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, error) {
+func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, error) {
 	_, span := lg.Span(ctx)
 	defer span.End()
 
@@ -233,7 +234,7 @@ func (e *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, er
 			return nil
 		}
 
-		start, count := math.PagerBox(first, last, pos, count)
+		start, count := math.PagerBox(first, last, after, count)
 		if count == 0 {
 			return nil
 		}
@@ -246,6 +247,10 @@ func (e *eventLog) Read(ctx context.Context, pos, count int64) (event.Events, er
 			var b []byte
 			b, err = stream.Read(start)
 			if err != nil {
+				if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {
+					err = fmt.Errorf("%w: empty", es.ErrNotFound)
+				}
+
 				span.RecordError(err)
 				return err
 			}

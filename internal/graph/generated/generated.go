@@ -59,9 +59,12 @@ type ComplexityRoot struct {
 
 	Event struct {
 		Bytes   func(childComplexity int) int
+		Created func(childComplexity int) int
 		EventID func(childComplexity int) int
 		ID      func(childComplexity int) int
+		Linked  func(childComplexity int) int
 		Meta    func(childComplexity int) int
+		Type    func(childComplexity int) int
 		Values  func(childComplexity int) int
 	}
 
@@ -163,6 +166,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Event.Bytes(childComplexity), true
 
+	case "Event.created":
+		if e.complexity.Event.Created == nil {
+			break
+		}
+
+		return e.complexity.Event.Created(childComplexity), true
+
 	case "Event.eventID":
 		if e.complexity.Event.EventID == nil {
 			break
@@ -177,12 +187,26 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Event.ID(childComplexity), true
 
+	case "Event.linked":
+		if e.complexity.Event.Linked == nil {
+			break
+		}
+
+		return e.complexity.Event.Linked(childComplexity), true
+
 	case "Event.meta":
 		if e.complexity.Event.Meta == nil {
 			break
 		}
 
 		return e.complexity.Event.Meta(childComplexity), true
+
+	case "Event.type":
+		if e.complexity.Event.Type == nil {
+			break
+		}
+
+		return e.complexity.Event.Type(childComplexity), true
 
 	case "Event.values":
 		if e.complexity.Event.Values == nil {
@@ -497,7 +521,11 @@ type Event implements Edge @goModel(model: "github.com/sour-is/ev/pkg/es.GQLEven
     eventID: String!
     values: Map!
     bytes: String!
+    type: String!
+    created: Time!
     meta: Meta!
+
+    linked: Event
 }`, BuiltIn: false},
 	{Name: "../../../pkg/gql/common.graphqls", Input: `scalar Time
 scalar Map
@@ -507,8 +535,9 @@ type Connection @goModel(model: "github.com/sour-is/ev/pkg/gql.Connection") {
     edges: [Edge!]!
 }
 input PageInput  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInput") {
-    idx: Int = 0
-    count: Int = 30
+    after:  Int = 0
+    before: Int
+    count:  Int = 30
 }
 type PageInfo  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInfo") {
     next: Boolean!
@@ -1053,6 +1082,94 @@ func (ec *executionContext) fieldContext_Event_bytes(ctx context.Context, field 
 	return fc, nil
 }
 
+func (ec *executionContext) _Event_type(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Event_type(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Type(), nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Event_type(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Event",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Event_created(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Event_created(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Created(), nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(time.Time)
+	fc.Result = res
+	return ec.marshalNTime2timeᚐTime(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Event_created(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Event",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Event_meta(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_meta(ctx, field)
 	if err != nil {
@@ -1102,6 +1219,65 @@ func (ec *executionContext) fieldContext_Event_meta(ctx context.Context, field g
 				return ec.fieldContext_Meta_position(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Meta", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Event_linked(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Event_linked(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Linked(ctx)
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*es.GQLEvent)
+	fc.Result = res
+	return ec.marshalOEvent2ᚖgithubᚗcomᚋsourᚑisᚋevᚋpkgᚋesᚐGQLEvent(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Event_linked(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Event",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Event_id(ctx, field)
+			case "eventID":
+				return ec.fieldContext_Event_eventID(ctx, field)
+			case "values":
+				return ec.fieldContext_Event_values(ctx, field)
+			case "bytes":
+				return ec.fieldContext_Event_bytes(ctx, field)
+			case "type":
+				return ec.fieldContext_Event_type(ctx, field)
+			case "created":
+				return ec.fieldContext_Event_created(ctx, field)
+			case "meta":
+				return ec.fieldContext_Event_meta(ctx, field)
+			case "linked":
+				return ec.fieldContext_Event_linked(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Event", field.Name)
 		},
 	}
 	return fc, nil
@@ -2298,8 +2474,14 @@ func (ec *executionContext) fieldContext_Subscription_eventAdded(ctx context.Con
 				return ec.fieldContext_Event_values(ctx, field)
 			case "bytes":
 				return ec.fieldContext_Event_bytes(ctx, field)
+			case "type":
+				return ec.fieldContext_Event_type(ctx, field)
+			case "created":
+				return ec.fieldContext_Event_created(ctx, field)
 			case "meta":
 				return ec.fieldContext_Event_meta(ctx, field)
+			case "linked":
+				return ec.fieldContext_Event_linked(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Event", field.Name)
 		},
@@ -4217,25 +4399,33 @@ func (ec *executionContext) unmarshalInputPageInput(ctx context.Context, obj int
 		asMap[k] = v
 	}
 
-	if _, present := asMap["idx"]; !present {
-		asMap["idx"] = 0
+	if _, present := asMap["after"]; !present {
+		asMap["after"] = 0
 	}
 	if _, present := asMap["count"]; !present {
 		asMap["count"] = 30
 	}
 
-	fieldsInOrder := [...]string{"idx", "count"}
+	fieldsInOrder := [...]string{"after", "before", "count"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "idx":
+		case "after":
 			var err error
 
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idx"))
-			it.Idx, err = ec.unmarshalOInt2ᚖint64(ctx, v)
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("after"))
+			it.After, err = ec.unmarshalOInt2ᚖint64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "before":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("before"))
+			it.Before, err = ec.unmarshalOInt2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -4330,36 +4520,67 @@ func (ec *executionContext) _Event(ctx context.Context, sel ast.SelectionSet, ob
 			out.Values[i] = ec._Event_id(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "eventID":
 
 			out.Values[i] = ec._Event_eventID(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "values":
 
 			out.Values[i] = ec._Event_values(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "bytes":
 
 			out.Values[i] = ec._Event_bytes(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
+			}
+		case "type":
+
+			out.Values[i] = ec._Event_type(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&invalids, 1)
+			}
+		case "created":
+
+			out.Values[i] = ec._Event_created(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "meta":
 
 			out.Values[i] = ec._Event_meta(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
+		case "linked":
+			field := field
+
+			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Event_linked(ctx, field, obj)
+				return res
+			}
+
+			out.Concurrently(i, func() graphql.Marshaler {
+				return innerFunc(ctx)
+
+			})
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

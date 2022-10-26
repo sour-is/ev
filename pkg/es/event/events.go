@@ -60,6 +60,9 @@ func (lis Events) StreamID() string {
 func (lis Events) SetStreamID(streamID string) {
 	SetStreamID(streamID, lis...)
 }
+func (lis Events) Count() int64 {
+	return int64(len(lis))
+}
 func (lis Events) First() Event {
 	if len(lis) == 0 {
 		return NilEvent

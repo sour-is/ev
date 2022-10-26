@@ -2,6 +2,7 @@ package es
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -15,13 +16,18 @@ type EventResolver interface {
 	Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error)
 	EventAdded(ctx context.Context, streamID string, after int64) (<-chan *GQLEvent, error)
 }
+type contextKey struct {
+	name string
+}
+
+var esKey = contextKey{"event-store"}
 
 func (es *EventStore) Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	lis, err := es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		span.RecordError(err)
 		return nil, err
 	}
@@ -107,6 +113,14 @@ func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int6
 	return ch, nil
 }
 func (*EventStore) RegisterHTTP(*http.ServeMux) {}
+func (e *EventStore) GetMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(gql.ToContext(r.Context(), esKey, e))
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 type GQLEvent struct {
 	e event.Event
@@ -118,6 +132,12 @@ func (e *GQLEvent) ID() string {
 func (e *GQLEvent) EventID() string {
 	return e.e.EventMeta().GetEventID()
 }
+func (e *GQLEvent) Type() string {
+	return event.TypeOf(e.e)
+}
+func (e *GQLEvent) Created() time.Time {
+	return e.e.EventMeta().Created()
+}
 func (e *GQLEvent) Values() map[string]interface{} {
 	return event.Values(e.e)
 }
@@ -128,5 +148,19 @@ func (e *GQLEvent) Bytes() (string, error) {
 func (e *GQLEvent) Meta() *event.Meta {
 	meta := e.e.EventMeta()
 	return &meta
+}
+func (e *GQLEvent) Linked(ctx context.Context) (*GQLEvent, error) {
+	values := event.Values(e.e)
+	streamID, ok := values["stream_id"].(string)
+	if !ok {
+		return nil, nil
+	}
+	pos, ok := values["pos"].(uint64)
+	if !ok {
+		return nil, nil
+	}
+
+	events, err := gql.FromContext[contextKey, *EventStore](ctx, esKey).Read(ctx, streamID, int64(pos)-1, 1)
+	return &GQLEvent{e: events.First()}, err
 }
 func (e *GQLEvent) IsEdge() {}

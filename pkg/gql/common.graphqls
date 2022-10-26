@@ -6,8 +6,9 @@ type Connection @goModel(model: "github.com/sour-is/ev/pkg/gql.Connection") {
     edges: [Edge!]!
 }
 input PageInput  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInput") {
-    idx: Int = 0
-    count: Int = 30
+    after:  Int = 0
+    before: Int
+    count:  Int = 30
 }
 type PageInfo  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInfo") {
     next: Boolean!
