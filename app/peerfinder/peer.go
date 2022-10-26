@@ -3,6 +3,7 @@ package peerfinder
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/netip"
 	"strconv"
 	"time"
@@ -122,6 +123,9 @@ func (e *Result) MarshalBinary() (text []byte, err error) {
 }
 func (e *Result) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, e)
+}
+func (e *Result) String() string {
+	return fmt.Sprintf("id: %s\npeer: %s\nversion: %s\nlatency: %0.4f", e.RequestID, e.PeerID, e.PeerVersion, e.Latency)
 }
 
 type Info struct {

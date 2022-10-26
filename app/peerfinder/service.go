@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 
-	ulid "github.com/oklog/ulid/v2"
 	contentnegotiation "gitlab.com/jamietanna/content-negotiation-go"
+	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/oklog/ulid"
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
@@ -88,10 +90,12 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) getPending(w http.ResponseWriter, r *http.Request, uuid string) {
-	ctx := r.Context()
-
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(r.Context())
 	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("uuid", uuid),
+	)
 
 	info, err := es.Upsert(ctx, s.es, "pf-info", func(ctx context.Context, agg *Info) error {
 		return agg.OnCreate() // initialize if not exists
@@ -155,7 +159,12 @@ func (s *service) getPending(w http.ResponseWriter, r *http.Request, uuid string
 	span.RecordError(err)
 }
 func (s *service) getResults(w http.ResponseWriter, r *http.Request, uuid string) {
-	ctx := r.Context()
+	ctx, span := lg.Span(r.Context())
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("uuid", uuid),
+	)
 
 	responses, err := s.es.Read(ctx, queueResponses+uuid, -1, es.AllEvents)
 	if err != nil {
@@ -177,16 +186,27 @@ func (s *service) getResults(w http.ResponseWriter, r *http.Request, uuid string
 	}
 }
 func (s *service) postRequest(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, span := lg.Span(r.Context())
+	defer span.End()
 
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
 
-	req := &Request{
-		RequestIP: r.Form.Get("req_ip"),
+	ip := net.ParseIP(r.Form.Get("req_ip"))
+	if ip == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
+
+	req := &Request{
+		RequestIP: ip.String(),
+	}
+
+	span.SetAttributes(
+		attribute.Stringer("req_ip", ip),
+	)
 
 	if hidden, err := strconv.ParseBool(r.Form.Get("req_hidden")); err != nil {
 		req.Hidden = hidden
@@ -195,7 +215,12 @@ func (s *service) postRequest(w http.ResponseWriter, r *http.Request) {
 	s.es.Append(ctx, queueRequests, event.NewEvents(req))
 }
 func (s *service) postResult(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
+	ctx, span := lg.Span(r.Context())
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("id", id),
+	)
 
 	if _, err := ulid.ParseStrict(id); err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -219,6 +244,9 @@ func (s *service) postResult(w http.ResponseWriter, r *http.Request, id string) 
 		PeerVersion: r.Form.Get("peer_version"),
 		Latency:     latency,
 	}
+	span.SetAttributes(
+		attribute.Stringer("result", req),
+	)
 
 	s.es.Append(ctx, queueResponses+id, event.NewEvents(req))
 }
