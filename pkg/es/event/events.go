@@ -137,7 +137,13 @@ func (m Meta) Created() time.Time {
 func (m Meta) GetEventID() string { return m.EventID.String() }
 
 func Init(ctx context.Context) error {
-	return Register(ctx, NilEvent, &EventPtr{})
+	if err := Register(ctx, NilEvent, &EventPtr{}); err != nil {
+		return err
+	}
+	if err := RegisterName(ctx, "event.eventPtr", &EventPtr{}); err != nil {
+		return err
+	}
+	return nil
 }
 
 type nilEvent struct{}
