@@ -73,7 +73,7 @@ func (s *streamer) Subscribe(ctx context.Context, streamID string, start int64) 
 	})
 	sub.unsub = s.delete(streamID, sub)
 
-	return sub, s.state.Modify(ctx, func(state *state) error {
+	return sub, s.state.Modify(ctx, func(ctx context.Context, state *state) error {
 		state.subscribers[streamID] = append(state.subscribers[streamID], sub)
 		return nil
 	})
@@ -82,13 +82,13 @@ func (s *streamer) Send(ctx context.Context, streamID string, events event.Event
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	return s.state.Modify(ctx, func(state *state) error {
+	return s.state.Modify(ctx, func(ctx context.Context, state *state) error {
 		ctx, span := lg.Span(ctx)
 		defer span.End()
 		span.AddEvent(fmt.Sprint("subscribers=", len(state.subscribers[streamID])))
 
 		for _, sub := range state.subscribers[streamID] {
-			err := sub.position.Modify(ctx, func(position *position) error {
+			err := sub.position.Modify(ctx, func(ctx context.Context, position *position) error {
 				_, span := lg.Span(ctx)
 				defer span.End()
 
@@ -116,7 +116,7 @@ func (s *streamer) delete(streamID string, sub *subscription) func(context.Conte
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return s.state.Modify(ctx, func(state *state) error {
+		return s.state.Modify(ctx, func(ctx context.Context, state *state) error {
 			_, span := lg.Span(ctx)
 			defer span.End()
 
@@ -147,6 +147,12 @@ func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Eve
 	defer span.End()
 
 	return w.up.Read(ctx, after, count)
+}
+func (w *wrapper) ReadN(ctx context.Context, index ...uint64) (event.Events, error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+
+	return w.up.ReadN(ctx, index...)
 }
 func (w *wrapper) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
 	ctx, span := lg.Span(ctx)
@@ -215,7 +221,7 @@ func (s *subscription) Recv(ctx context.Context) bool {
 
 	var wait func(context.Context) bool
 
-	err := s.position.Modify(ctx, func(position *position) error {
+	err := s.position.Modify(ctx, func(ctx context.Context, position *position) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 
@@ -263,7 +269,7 @@ func (s *subscription) Events(ctx context.Context) (event.Events, error) {
 	defer span.End()
 
 	var events event.Events
-	return events, s.position.Modify(ctx, func(position *position) error {
+	return events, s.position.Modify(ctx, func(ctx context.Context, position *position) error {
 		ctx, span := lg.Span(ctx)
 		defer span.End()
 

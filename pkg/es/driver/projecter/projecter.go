@@ -53,6 +53,12 @@ func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Eve
 
 	return w.up.Read(ctx, after, count)
 }
+func (w *wrapper) ReadN(ctx context.Context, index ...uint64) (event.Events, error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+
+	return w.up.ReadN(ctx, index...)
+}
 func (w *wrapper) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -123,10 +129,11 @@ func (w *wrapper) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(
 }
 
 func DefaultProjection(e event.Event) []event.Event {
-	eventType := event.TypeOf(e)
 	m := e.EventMeta()
 	streamID := m.StreamID
 	streamPos := m.Position
+	eventType := event.TypeOf(e)
+	pkg, _, _ := strings.Cut(eventType, ".")
 
 	e1 := event.NewPtr(streamID, streamPos)
 	event.SetStreamID("$all", e1)
@@ -135,7 +142,6 @@ func DefaultProjection(e event.Event) []event.Event {
 	event.SetStreamID("$type-"+eventType, e2)
 
 	e3 := event.NewPtr(streamID, streamPos)
-	pkg, _, _ := strings.Cut(eventType, ".")
 	event.SetStreamID("$pkg-"+pkg, e3)
 
 	return []event.Event{e1, e2, e3}

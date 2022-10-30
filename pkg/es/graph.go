@@ -160,7 +160,7 @@ func (e *GQLEvent) Linked(ctx context.Context) (*GQLEvent, error) {
 		return nil, nil
 	}
 
-	events, err := gql.FromContext[contextKey, *EventStore](ctx, esKey).Read(ctx, streamID, int64(pos)-1, 1)
+	events, err := gql.FromContext[contextKey, *EventStore](ctx, esKey).ReadN(ctx, streamID, pos)
 	return &GQLEvent{e: events.First()}, err
 }
 func (e *GQLEvent) IsEdge() {}

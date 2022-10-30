@@ -22,7 +22,7 @@ func TestLocker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := value.Modify(ctx, func(c *config) error {
+	err := value.Modify(ctx, func(ctx context.Context, c *config) error {
 		c.Value = "one"
 		c.Counter++
 		return nil
@@ -37,7 +37,7 @@ func TestLocker(t *testing.T) {
 
 	wait := make(chan struct{})
 
-	go value.Modify(ctx, func(c *config) error {
+	go value.Modify(ctx, func(ctx context.Context, c *config) error {
 		c.Value = "two"
 		c.Counter++
 		close(wait)
@@ -47,7 +47,7 @@ func TestLocker(t *testing.T) {
 	<-wait
 	cancel()
 
-	err = value.Modify(ctx, func(c *config) error {
+	err = value.Modify(ctx, func(ctx context.Context, c *config) error {
 		c.Value = "three"
 		c.Counter++
 		return nil

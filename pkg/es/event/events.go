@@ -137,7 +137,7 @@ func (m Meta) Created() time.Time {
 func (m Meta) GetEventID() string { return m.EventID.String() }
 
 func Init(ctx context.Context) error {
-	return Register(ctx, NilEvent, &eventPtr{})
+	return Register(ctx, NilEvent, &EventPtr{})
 }
 
 type nilEvent struct{}
@@ -156,40 +156,40 @@ func (e *nilEvent) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, e)
 }
 
-type eventPtr struct {
-	streamID string
-	pos      uint64
+type EventPtr struct {
+	StreamID string `json:"stream_id"`
+	Pos      uint64 `json:"pos"`
 
 	eventMeta Meta
 }
 
-var _ Event = (*eventPtr)(nil)
+var _ Event = (*EventPtr)(nil)
 
-func NewPtr(streamID string, pos uint64) *eventPtr {
-	return &eventPtr{streamID: streamID, pos: pos}
+func NewPtr(streamID string, pos uint64) *EventPtr {
+	return &EventPtr{StreamID: streamID, Pos: pos}
 }
 
 // MarshalBinary implements Event
-func (e *eventPtr) MarshalBinary() (data []byte, err error) {
-	return []byte(fmt.Sprintf("%s@%d", e.streamID, e.pos)), nil
+func (e *EventPtr) MarshalBinary() (data []byte, err error) {
+	return []byte(fmt.Sprintf("%s@%d", e.StreamID, e.Pos)), nil
 }
 
 // UnmarshalBinary implements Event
-func (e *eventPtr) UnmarshalBinary(data []byte) error {
+func (e *EventPtr) UnmarshalBinary(data []byte) error {
 	s := string(data)
 	idx := strings.LastIndex(s, "@")
 	if idx == -1 {
 		return fmt.Errorf("missing @ in: %s", s)
 	}
-	e.streamID = s[:idx]
+	e.StreamID = s[:idx]
 	var err error
-	e.pos, err = strconv.ParseUint(s[idx+1:], 10, 64)
+	e.Pos, err = strconv.ParseUint(s[idx+1:], 10, 64)
 
 	return err
 }
 
 // EventMeta implements Event
-func (e *eventPtr) EventMeta() Meta {
+func (e *EventPtr) EventMeta() Meta {
 	if e == nil {
 		return Meta{}
 	}
@@ -197,19 +197,19 @@ func (e *eventPtr) EventMeta() Meta {
 }
 
 // SetEventMeta implements Event
-func (e *eventPtr) SetEventMeta(m Meta) {
+func (e *EventPtr) SetEventMeta(m Meta) {
 	if e == nil {
 		return
 	}
 	e.eventMeta = m
 }
 
-func (e *eventPtr) Values() any {
+func (e *EventPtr) Values() any {
 	return struct {
 		StreamID string `json:"stream_id"`
 		Pos      uint64 `json:"pos"`
 	}{
-		e.streamID,
-		e.pos,
+		e.StreamID,
+		e.Pos,
 	}
 }

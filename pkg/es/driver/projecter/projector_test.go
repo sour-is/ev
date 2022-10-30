@@ -39,6 +39,7 @@ type mockEventLog struct {
 	onFirstIndex func(context.Context) (uint64, error)
 	onLastIndex  func(context.Context) (uint64, error)
 	onRead       func(context.Context, int64, int64) (event.Events, error)
+	onReadN      func(context.Context, ...uint64) (event.Events, error)
 }
 
 // Append implements driver.EventLog
@@ -69,6 +70,13 @@ func (m *mockEventLog) LastIndex(ctx context.Context) (uint64, error) {
 func (m *mockEventLog) Read(ctx context.Context, pos int64, count int64) (event.Events, error) {
 	if m.onRead != nil {
 		return m.onRead(ctx, pos, count)
+	}
+
+	panic("unimplemented")
+}
+func (m *mockEventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, error) {
+	if m.onReadN != nil {
+		return m.onReadN(ctx, index...)
 	}
 
 	panic("unimplemented")

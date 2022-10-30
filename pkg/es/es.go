@@ -53,7 +53,7 @@ func Register(ctx context.Context, name string, d driver.Driver) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	return drivers.Modify(ctx, func(c *config) error {
+	return drivers.Modify(ctx, func(ctx context.Context, c *config) error {
 		if _, set := c.drivers[name]; set {
 			return fmt.Errorf("driver %s already set", name)
 		}
@@ -185,6 +185,30 @@ func (es *EventStore) Read(ctx context.Context, streamID string, after, count in
 	}
 
 	events, err := l.Read(ctx, after, count)
+	Mes_read.Add(ctx, events.Count())
+
+	return events, err
+}
+func (es *EventStore) ReadN(ctx context.Context, streamID string, index ...uint64) (event.Events, error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+
+	lis := make([]int64, len(index))
+	for i,j :=range index {
+		lis[i] = int64(j)
+	}
+
+	span.SetAttributes(
+		attribute.String("streamID", streamID),
+		attribute.Int64Slice("index", lis),
+	)
+
+	l, err := es.Driver.EventLog(ctx, streamID)
+	if err != nil {
+		return nil, err
+	}
+
+	events, err := l.ReadN(ctx, index...)
 	Mes_read.Add(ctx, events.Count())
 
 	return events, err

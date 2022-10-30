@@ -11,26 +11,58 @@ import (
 	"github.com/sour-is/ev/pkg/es/event"
 )
 
-type Request struct {
+type Request struct{
+	event.AggregateRoot
+
+	RequestIP string `json:"req_ip"`
+	Hidden    bool   `json:"hide,omitempty"`
+
+	Responses []Response `json:"responses"`
+}
+
+var _ event.Aggregate = (*Request)(nil)
+func (a *Request) ApplyEvent(lis ...event.Event) {
+	for _, e := range lis {
+		switch e:=e.(type) {
+		case *RequestSubmitted:
+			a.RequestIP = e.RequestIP
+			a.Hidden = e.Hidden
+		case *ResultSubmitted:
+				a.Responses = append(a.Responses, Response{
+					PeerID: e.PeerID,
+					PeerVersion: e.PeerVersion,
+					Latency: e.Latency,
+				})
+		}
+	}
+}
+
+type Response struct {
+	PeerID      string  `json:"peer_id"`
+	PeerVersion string  `json:"peer_version"`
+	Latency     float64 `json:"latency,omitempty"`
+}
+
+type RequestSubmitted struct {
 	eventMeta event.Meta
 
 	RequestIP string `json:"req_ip"`
 	Hidden    bool   `json:"hide,omitempty"`
 }
 
-func (r *Request) StreamID() string {
+func (r *RequestSubmitted) StreamID() string {
 	return r.EventMeta().GetEventID()
 }
-func (r *Request) RequestID() string {
+func (r *RequestSubmitted) RequestID() string {
 	return r.EventMeta().GetEventID()
 }
-func (r *Request) Created() time.Time {
+func (r *RequestSubmitted) Created() time.Time {
 	return r.EventMeta().Created()
 }
-func (r *Request) CreatedString() string {
+func (r *RequestSubmitted) CreatedString() string {
 	return r.Created().Format("2006-01-02 15:04:05")
 }
-func (r *Request) Family() int {
+func (r *RequestSubmitted) Family() int {
 	if r == nil {
 		return 0
 	}
@@ -46,26 +78,26 @@ func (r *Request) Family() int {
 	}
 }
 
-var _ event.Event = (*Request)(nil)
+var _ event.Event = (*RequestSubmitted)(nil)
 
-func (e *Request) EventMeta() event.Meta {
+func (e *RequestSubmitted) EventMeta() event.Meta {
 	if e == nil {
 		return event.Meta{}
 	}
 	return e.eventMeta
 }
-func (e *Request) SetEventMeta(m event.Meta) {
+func (e *RequestSubmitted) SetEventMeta(m event.Meta) {
 	if e != nil {
 		e.eventMeta = m
 	}
 }
-func (e *Request) MarshalBinary() (text []byte, err error) {
+func (e *RequestSubmitted) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }
-func (e *Request) UnmarshalBinary(b []byte) error {
+func (e *RequestSubmitted) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, e)
 }
-func (e *Request) MarshalEnviron() ([]byte, error) {
+func (e *RequestSubmitted) MarshalEnviron() ([]byte, error) {
 	if e == nil {
 		return nil, nil
 	}
@@ -92,7 +124,7 @@ func (e *Request) MarshalEnviron() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-type Result struct {
+type ResultSubmitted struct {
 	eventMeta event.Meta
 
 	RequestID   string  `json:"req_id"`
@@ -101,30 +133,30 @@ type Result struct {
 	Latency     float64 `json:"latency,omitempty"`
 }
 
-func (r *Result) Created() time.Time {
+func (r *ResultSubmitted) Created() time.Time {
 	return r.eventMeta.Created()
 }
 
-var _ event.Event = (*Result)(nil)
+var _ event.Event = (*ResultSubmitted)(nil)
 
-func (e *Result) EventMeta() event.Meta {
+func (e *ResultSubmitted) EventMeta() event.Meta {
 	if e == nil {
 		return event.Meta{}
 	}
 	return e.eventMeta
 }
-func (e *Result) SetEventMeta(m event.Meta) {
+func (e *ResultSubmitted) SetEventMeta(m event.Meta) {
 	if e != nil {
 		e.eventMeta = m
 	}
 }
-func (e *Result) MarshalBinary() (text []byte, err error) {
+func (e *ResultSubmitted) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }
-func (e *Result) UnmarshalBinary(b []byte) error {
+func (e *ResultSubmitted) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, e)
 }
-func (e *Result) String() string {
+func (e *ResultSubmitted) String() string {
 	return fmt.Sprintf("id: %s\npeer: %s\nversion: %s\nlatency: %0.4f", e.RequestID, e.PeerID, e.PeerVersion, e.Latency)
 }
 

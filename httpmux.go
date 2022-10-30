@@ -34,3 +34,8 @@ func newMux() *mux {
 
 	return mux
 }
+
+type RegisterHTTP func(*http.ServeMux)
+func (fn RegisterHTTP) RegisterHTTP(mux *http.ServeMux) {
+	fn(mux)
+}

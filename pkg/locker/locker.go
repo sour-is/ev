@@ -19,7 +19,7 @@ func New[T any](initial *T) *Locked[T] {
 }
 
 // Modify will call the function with the locked value
-func (s *Locked[T]) Modify(ctx context.Context, fn func(*T) error) error {
+func (s *Locked[T]) Modify(ctx context.Context, fn func(context.Context, *T) error) error {
 	_, span := lg.Span(ctx)
 	defer span.End()
 
@@ -30,7 +30,7 @@ func (s *Locked[T]) Modify(ctx context.Context, fn func(*T) error) error {
 	select {
 	case state := <-s.state:
 		defer func() { s.state <- state }()
-		return fn(state)
+		return fn(ctx, state)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -40,7 +40,7 @@ func (s *Locked[T]) Modify(ctx context.Context, fn func(*T) error) error {
 func (s *Locked[T]) Copy(ctx context.Context) (T, error) {
 	var t T
 
-	err := s.Modify(ctx, func(c *T) error {
+	err := s.Modify(ctx, func(ctx context.Context, c *T) error {
 		if c != nil {
 			t = *c
 		}

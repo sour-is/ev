@@ -7,9 +7,16 @@ import (
 	"os"
 	"reflect"
 	"runtime/debug"
+	"time"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
+	"github.com/99designs/gqlgen/graphql/handler/lru"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	"github.com/gorilla/websocket"
 	"github.com/ravilushqa/otelgqlgen"
+	"github.com/sour-is/ev/app/gql/graphiql"
 	"github.com/sour-is/ev/app/gql/playground"
 	"github.com/sour-is/ev/app/msgbus"
 	"github.com/sour-is/ev/app/salty"
@@ -86,11 +93,13 @@ func (r *Resolver) ChainMiddlewares(h http.Handler) http.Handler {
 }
 
 func (r *Resolver) RegisterHTTP(mux *http.ServeMux) {
-	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: r}))
+	gql := NewServer(generated.NewExecutableSchema(generated.Config{Resolvers: r}))
+
 	gql.SetRecoverFunc(NoopRecover)
 	gql.Use(otelgqlgen.Middleware())
-	mux.Handle("/", playground.Handler("GraphQL playground", "/gql"))
+	mux.Handle("/graphiql", graphiql.Handler("GraphiQL playground", "/gql"))
 	mux.Handle("/gql", lg.Htrace(r.ChainMiddlewares(gql), "gql"))
+	mux.Handle("/playground", playground.Handler("GraphQL playground", "/gql"))
 }
 
 type noop struct{}
@@ -130,3 +139,34 @@ func (*noop) EventAdded(ctx context.Context, streamID string, after int64) (<-ch
 }
 
 func (*noop) RegisterHTTP(*http.ServeMux) {}
+
+func NewServer(es graphql.ExecutableSchema) *handler.Server {
+	srv := handler.New(es)
+
+	srv.AddTransport(transport.Websocket{
+		Upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				switch r.Header.Get("Origin") {
+				case "https://ev.sour.is", "https://www.graphqlbin.com":
+					return true
+				default:
+					return false
+				}
+			},
+		},
+		KeepAlivePingInterval: 10 * time.Second,
+	})
+	srv.AddTransport(transport.Options{})
+	srv.AddTransport(transport.GET{})
+	srv.AddTransport(transport.POST{})
+	srv.AddTransport(transport.MultipartForm{})
+
+	srv.SetQueryCache(lru.New(1000))
+
+	srv.Use(extension.Introspection{})
+	srv.Use(extension.AutomaticPersistedQuery{
+		Cache: lru.New(100),
+	})
+
+	return srv
+}

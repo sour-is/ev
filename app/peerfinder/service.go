@@ -2,8 +2,12 @@ package peerfinder
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
+	"html/template"
 	"io"
+	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -16,24 +20,39 @@ import (
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/locker"
 )
 
 const (
-	queueRequests  = "pf-requests"
-	queueResponses = "pf-response-"
 	aggInfo        = "pf-info"
+	queueRequests  = "pf-requests"
+	queueResponses = "pf-request-"
+	queuePeers     = "pf-peer-"
 	initVersion    = "1.1.0"
+)
+
+var (
+	//go:embed pages/* layouts/* assets/*
+	files     embed.FS
+	templates map[string]*template.Template
 )
 
 type service struct {
 	es *es.EventStore
+
+	State locker.Locked[state]
+}
+
+type state struct {
+	Version  string
+	Requests []Request
 }
 
 func New(ctx context.Context, es *es.EventStore) (*service, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	if err := event.Register(ctx, &Request{}, &Result{}, &VersionChanged{}); err != nil {
+	if err := event.Register(ctx, &RequestSubmitted{}, &ResultSubmitted{}, &VersionChanged{}); err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
@@ -43,8 +62,13 @@ func New(ctx context.Context, es *es.EventStore) (*service, error) {
 	return svc, nil
 }
 func (s *service) RegisterHTTP(mux *http.ServeMux) {
-	mux.Handle("/peers/", lg.Htrace(s, "peers"))
+	loadTemplates()
+	a, err := fs.Sub(files, "assets")
+	log.Println(err)
+	assets := http.StripPrefix("/peers/assets/", http.FileServer(http.FS(a)))
 
+	mux.Handle("/peers/assets/", lg.Htrace(assets, "peer-assets"))
+	mux.Handle("/peers/", lg.Htrace(s, "peers"))
 }
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -66,7 +90,8 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 
 		default:
-			w.WriteHeader(http.StatusNotFound)
+			t := templates["home.tpl"]
+			t.Execute(w, nil)
 			return
 		}
 	case http.MethodPost:
@@ -113,7 +138,7 @@ func (s *service) getPending(w http.ResponseWriter, r *http.Request, uuid string
 		return
 	}
 
-	responses, err := s.es.Read(ctx, queueResponses+uuid, -1, -30)
+	responses, err := s.es.Read(ctx, queuePeers+uuid, -1, -30)
 	if err != nil {
 		span.RecordError(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -199,18 +224,16 @@ func (s *service) postRequest(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
-	req := &Request{
+	req := &RequestSubmitted{
 		RequestIP: ip.String(),
+	}
+	if hidden, err := strconv.ParseBool(r.Form.Get("req_hidden")); err != nil {
+		req.Hidden = hidden
 	}
 
 	span.SetAttributes(
 		attribute.Stringer("req_ip", ip),
 	)
-
-	if hidden, err := strconv.ParseBool(r.Form.Get("req_hidden")); err != nil {
-		req.Hidden = hidden
-	}
 
 	s.es.Append(ctx, queueRequests, event.NewEvents(req))
 }
@@ -238,25 +261,36 @@ func (s *service) postResult(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	req := &Result{
+	req := &ResultSubmitted{
 		RequestID:   id,
 		PeerID:      r.Form.Get("peer_id"),
 		PeerVersion: r.Form.Get("peer_version"),
 		Latency:     latency,
 	}
+
 	span.SetAttributes(
 		attribute.Stringer("result", req),
 	)
 
-	s.es.Append(ctx, queueResponses+id, event.NewEvents(req))
+	idx, err := s.es.LastIndex(ctx, queueResponses+id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if idx == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	s.es.Append(ctx, queueRequests, event.NewEvents(req))
 }
 
-func filter(requests, responses event.Events) *Request {
+func filter(requests, responses event.Events) *RequestSubmitted {
 	have := make(map[string]struct{}, len(responses))
-	for _, res := range toList[Result](responses...) {
+	for _, res := range toList[ResultSubmitted](responses...) {
 		have[res.RequestID] = struct{}{}
 	}
-	for _, req := range reverse(toList[Request](requests...)...) {
+	for _, req := range reverse(toList[RequestSubmitted](requests...)...) {
 		if _, ok := have[req.RequestID()]; !ok {
 			return req
 		}
@@ -296,4 +330,51 @@ func encodeTo(w io.Writer, fns ...func() ([]byte, error)) (int, error) {
 		}
 	}
 	return i, nil
+}
+func loadTemplates() error {
+	if templates != nil {
+		return nil
+	}
+	templates = make(map[string]*template.Template)
+	tmplFiles, err := fs.ReadDir(files, "pages")
+	if err != nil {
+		return err
+	}
+
+	for _, tmpl := range tmplFiles {
+		if tmpl.IsDir() {
+			continue
+		}
+		log.Println(tmpl.Name())
+		pt, err := template.ParseFS(files, "pages/"+tmpl.Name(), "layouts/*.tpl")
+		if err != nil {
+			return err
+		}
+
+		templates[tmpl.Name()] = pt
+	}
+	return nil
+}
+
+func Projector(e event.Event) []event.Event {
+	m := e.EventMeta()
+	streamID := m.StreamID
+	streamPos := m.Position
+
+	switch e := e.(type) {
+	case *RequestSubmitted:
+		e1 := event.NewPtr(streamID, streamPos)
+		event.SetStreamID(queueResponses+e.RequestID(), e1)
+
+		return []event.Event{e1}
+	case *ResultSubmitted:
+		e1 := event.NewPtr(streamID, streamPos)
+		event.SetStreamID(queueResponses+e.RequestID, e1)
+
+		e2 := event.NewPtr(streamID, streamPos)
+		event.SetStreamID(queuePeers+e.PeerID, e2)
+
+		return []event.Event{e1, e2}
+	}
+	return nil
 }

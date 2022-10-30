@@ -49,7 +49,7 @@ func (m *memstore) EventLog(ctx context.Context, streamID string) (driver.EventL
 
 	el := &eventLog{streamID: streamID}
 
-	err := m.state.Modify(ctx, func(state *state) error {
+	err := m.state.Modify(ctx, func(ctx context.Context, state *state) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 
@@ -76,7 +76,7 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 
 	event.SetStreamID(m.streamID, events...)
 
-	return uint64(len(events)), m.events.Modify(ctx, func(stream *event.Events) error {
+	return uint64(len(events)), m.events.Modify(ctx, func(ctx context.Context, stream *event.Events) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 
@@ -111,6 +111,23 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 	})
 }
 
+// ReadOne implements readone
+func (m *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, error) {
+	_, span := lg.Span(ctx)
+	defer span.End()
+
+	var events event.Events
+	err := m.events.Modify(ctx, func(ctx context.Context, stream *event.Events) error {
+		var err error
+
+		events, err = readStreamN(ctx, stream, index...)
+
+		return err
+	})
+
+	return events, err
+}
+
 // Read implements driver.EventStore
 func (m *eventLog) Read(ctx context.Context, after int64, count int64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
@@ -118,7 +135,7 @@ func (m *eventLog) Read(ctx context.Context, after int64, count int64) (event.Ev
 
 	var events event.Events
 
-	err := m.events.Modify(ctx, func(stream *event.Events) error {
+	err := m.events.Modify(ctx, func(ctx context.Context, stream *event.Events) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 
@@ -141,12 +158,8 @@ func (m *eventLog) Read(ctx context.Context, after int64, count int64) (event.Ev
 			span.AddEvent(fmt.Sprintf("read event %d of %d", i, math.Abs(count)))
 
 			// --- clone event
-			e := (*stream)[start-1]
-			b, err := event.MarshalBinary(e)
-			if err != nil {
-				return err
-			}
-			events[i], err = event.UnmarshalBinary(ctx, b, e.EventMeta().Position)
+			var err error
+			events[i], err = readStream(ctx, stream, start)
 			if err != nil {
 				return err
 			}
@@ -193,4 +206,43 @@ func (m *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 
 func (m *eventLog) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
 	panic("not implemented")
+}
+
+func readStream(ctx context.Context, stream *event.Events, index uint64) (event.Event, error) {
+	_, span := lg.Span(ctx)
+	defer span.End()
+
+	var b []byte
+	var err error
+	e := (*stream)[index-1]
+	b, err = event.MarshalBinary(e)
+	if err != nil {
+		return nil, err
+	}
+	e, err = event.UnmarshalBinary(ctx, b, e.EventMeta().Position)
+	if err != nil {
+		return nil, err
+	}
+	return e, err
+}
+func readStreamN(ctx context.Context, stream *event.Events, index ...uint64) (event.Events, error) {
+	_, span := lg.Span(ctx)
+	defer span.End()
+
+	var b []byte
+	var err error
+
+	events := make(event.Events, len(index))
+	for i, index := range index {
+		e := (*stream)[index-1]
+		b, err = event.MarshalBinary(e)
+		if err != nil {
+			return nil, err
+		}
+		events[i], err = event.UnmarshalBinary(ctx, b, e.EventMeta().Position)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return events, err
 }

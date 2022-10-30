@@ -94,7 +94,7 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 		_, span := lg.Span(ctx)
 		defer span.End()
 
-		l.Modify(ctx, func(w *wal.Log) error {
+		l.Modify(ctx, func(ctx context.Context, w *wal.Log) error {
 			_, span := lg.Span(ctx)
 			defer span.End()
 
@@ -128,7 +128,7 @@ func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.Event
 
 	el := &eventLog{streamID: streamID, diskStore: d}
 
-	return el, d.openlogs.Modify(ctx, func(openlogs *openlogs) error {
+	return el, d.openlogs.Modify(ctx, func(ctx context.Context, openlogs *openlogs) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 
@@ -166,7 +166,7 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 	event.SetStreamID(e.streamID, events...)
 
 	var count uint64
-	err := e.events.Modify(ctx, func(l *wal.Log) error {
+	err := e.events.Modify(ctx, func(ctx context.Context, l *wal.Log) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 
@@ -215,7 +215,7 @@ func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, 
 
 	var events event.Events
 
-	err := e.events.Modify(ctx, func(stream *wal.Log) error {
+	err := e.events.Modify(ctx, func(ctx context.Context, stream *wal.Log) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 
@@ -244,17 +244,7 @@ func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, 
 			span.AddEvent(fmt.Sprintf("read event %d of %d", i, len(events)))
 
 			// ---
-			var b []byte
-			b, err = stream.Read(start)
-			if err != nil {
-				if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {
-					err = fmt.Errorf("%w: empty", es.ErrNotFound)
-				}
-
-				span.RecordError(err)
-				return err
-			}
-			events[i], err = event.UnmarshalBinary(ctx, b, start)
+			events[i], err = readStream(ctx, stream, start)
 			if err != nil {
 				span.RecordError(err)
 				return err
@@ -283,6 +273,21 @@ func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, 
 
 	return events, nil
 }
+func (e *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, error) {
+	_, span := lg.Span(ctx)
+	defer span.End()
+
+	var events event.Events
+	err := e.events.Modify(ctx, func(ctx context.Context, stream *wal.Log) error {
+		var err error
+
+		events, err = readStreamN(ctx, stream, index...)
+
+		return err
+	})
+
+	return events, err
+}
 func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	_, span := lg.Span(ctx)
 	defer span.End()
@@ -290,7 +295,7 @@ func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	var idx uint64
 	var err error
 
-	err = e.events.Modify(ctx, func(events *wal.Log) error {
+	err = e.events.Modify(ctx, func(ctx context.Context, events *wal.Log) error {
 		idx, err = events.FirstIndex()
 		return err
 	})
@@ -304,7 +309,7 @@ func (e *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 	var idx uint64
 	var err error
 
-	err = e.events.Modify(ctx, func(events *wal.Log) error {
+	err = e.events.Modify(ctx, func(ctx context.Context, events *wal.Log) error {
 		idx, err = events.LastIndex()
 		return err
 	})
@@ -313,4 +318,51 @@ func (e *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 }
 func (e *eventLog) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
 	panic("not implemented")
+}
+func readStream(ctx context.Context, stream *wal.Log, index uint64) (event.Event, error) {
+	_, span := lg.Span(ctx)
+	defer span.End()
+
+	var b []byte
+	var err error
+	b, err = stream.Read(index)
+	if err != nil {
+		if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {
+			err = fmt.Errorf("%w: empty", es.ErrNotFound)
+		}
+
+		span.RecordError(err)
+		return nil, err
+	}
+	e, err := event.UnmarshalBinary(ctx, b, index)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+	return e, err
+}
+func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.Events, error) {
+	_, span := lg.Span(ctx)
+	defer span.End()
+
+	var b []byte
+	var err error
+	events := make(event.Events, len(index))
+	for i, idx := range index {
+		b, err = stream.Read(idx)
+		if err != nil {
+			if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {
+				err = fmt.Errorf("%w: empty", es.ErrNotFound)
+			}
+
+			span.RecordError(err)
+			return nil, err
+		}
+		events[i], err = event.UnmarshalBinary(ctx, b, idx)
+		if err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+	}
+	return events, err
 }

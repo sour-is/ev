@@ -22,6 +22,7 @@ import (
 	diskstore "github.com/sour-is/ev/pkg/es/driver/disk-store"
 	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
 	"github.com/sour-is/ev/pkg/es/driver/projecter"
+	resolvelinks "github.com/sour-is/ev/pkg/es/driver/resolve-links"
 	"github.com/sour-is/ev/pkg/es/driver/streamer"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/set"
@@ -61,10 +62,15 @@ func run(ctx context.Context) error {
 		}
 
 		es, err := es.Open(
-			ctx, 
-			env("EV_DATA", "mem:"), 
-			streamer.New(ctx), 
-			projecter.New(ctx, projecter.DefaultProjection),
+			ctx,
+			env("EV_DATA", "mem:"),
+			streamer.New(ctx),
+			projecter.New(
+				ctx,
+				projecter.DefaultProjection,
+				peerfinder.Projector,
+			),
+			resolvelinks.New(),
 		)
 		if err != nil {
 			span.RecordError(err)
@@ -129,7 +135,9 @@ func run(ctx context.Context) error {
 			}
 			svcs = append(svcs, gql)
 		}
-		svcs = append(svcs, lg.NewHTTP(ctx))
+		svcs = append(svcs, lg.NewHTTP(ctx), RegisterHTTP(func(mux *http.ServeMux) {
+			mux.Handle("/", http.RedirectHandler("/playground", http.StatusTemporaryRedirect))
+		}))
 
 		s.Handler = httpMux(svcs...)
 
