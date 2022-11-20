@@ -16,6 +16,8 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/gorilla/websocket"
 	"github.com/ravilushqa/otelgqlgen"
+	"github.com/vektah/gqlparser/v2/gqlerror"
+
 	"github.com/sour-is/ev/app/gql/graphiql"
 	"github.com/sour-is/ev/app/gql/playground"
 	"github.com/sour-is/ev/app/msgbus"
@@ -24,7 +26,6 @@ import (
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/gql"
-	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
 type Resolver struct {
@@ -137,7 +138,9 @@ func (*noop) Events(ctx context.Context, streamID string, paging *gql.PageInput)
 func (*noop) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *es.GQLEvent, error) {
 	panic("not implemented")
 }
-
+func (*noop) TruncateStream(ctx context.Context, streamID string, index int64) (bool, error) {
+	panic("not implemented")
+}
 func (*noop) RegisterHTTP(*http.ServeMux) {}
 
 func NewServer(es graphql.ExecutableSchema) *handler.Server {

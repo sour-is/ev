@@ -24,12 +24,12 @@ var page = template.Must(template.New("graphiql").Parse(`<!DOCTYPE html>
 		}
 	</style>
 	<script
-		src="https://cdn.jsdelivr.net/npm/react@17.0.2/umd/react.production.min.js"
+		src="https://cdn.jsdelivr.net/npm/react@{{.reactVersion}}/umd/react.production.min.js"
 		integrity="{{.reactSRI}}"
 		crossorigin="anonymous"
 	></script>
 	<script
-		src="https://cdn.jsdelivr.net/npm/react-dom@17.0.2/umd/react-dom.production.min.js"
+		src="https://cdn.jsdelivr.net/npm/react-dom@{{.reactVersion}}/umd/react-dom.production.min.js"
 		integrity="{{.reactDOMSRI}}"
 		crossorigin="anonymous"
 	></script>
@@ -82,9 +82,10 @@ func Handler(title string, endpoint string) http.HandlerFunc {
 			"endpoint":             endpoint,
 			"endpointIsAbsolute":   endpointHasScheme(endpoint),
 			"subscriptionEndpoint": getSubscriptionEndpoint(endpoint),
-			"version":              "2.0.10",
-			"cssSRI":               "sha256-gQryfbGYeYFxnJYnfPStPYFt0+uv8RP8Dm++eh00G9c=",
-			"jsSRI":                "sha256-qQ6pw7LwTLC+GfzN+cJsYXfVWRKH9O5o7+5H96gTJhQ=",
+			"version":              "2.0.13",
+			"reactVersion":         "17.0.2",
+			"cssSRI":               "sha256-qKvndYgkAMQOBoa1SZF9NlbIig+kQ3Fk4f8wlrEqBLw=",
+			"jsSRI":                "sha256-dExtzxjgqXfOgQ94xw079jAjd4dPAFrO2Qz6I3Yd9Ko=",
 			"reactSRI":             "sha256-Ipu/TQ50iCCVZBUsZyNJfxrDk0E2yhaEIz0vqI+kFG8=",
 			"reactDOMSRI":          "sha256-nbMykgB6tsOFJ7OdVmPpdqMFVk4ZsqWocT6issAPUF0=",
 		})
