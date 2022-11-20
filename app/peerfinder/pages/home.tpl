@@ -30,9 +30,9 @@
   <form class="form-inline" method="POST" action="/peers/req">
         <label>Ping IP Address [Check Hidden?]:</label>
         <div class="input-group input-group-sm">
-            <input class="form-control" type="text" name="req_ip" placeholder="{$rq->remote_ip}">
+            <input class="form-control" type="text" name="req_ip" placeholder="{{ .RemoteIP }}">
             <span class="input-group-addon">
-              <input type="checkbox" name="req_hidden" value=1 aria-label="Hidden?">
+              <input type="checkbox" name="req_hidden" disabled value=1 aria-label="Hidden?">
             </span>
         </div>
         <button class="btn btn-default" type="submit">Submit</button>
@@ -40,4 +40,21 @@
 
   <p>If you mark your measurement as hidden, it will not be displayed on the
   page below.  Note that the IP addresses of the target will be shown alongside the result.</p>
+
+
+  <div class=row>
+  <h2>Results</h2>
+  {{ with $args := . }}
+  {{range $req := .Requests}}
+      <div class="panel panel-primary">
+          <div class="panel-heading">
+            <a href="/peers/req/{{ $req.RequestID }}">{{ $req.RequestIP }} on {{ $req.Created }}</a> 
+            <div style='float:right'><a href="/peers/req/{{ $req.RequestID }}" class='btn btn-success'>{{ countResponses $req }} / {{ $args.CountPeers }} </a></div>
+          </div>
+          <div class="panel-body"><b>Request ID:</b> {{ $req.RequestID }}</div>
+      </div>
+  {{end}}
+  {{end}}
+  </div>
+
 {{end}}

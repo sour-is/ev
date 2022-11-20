@@ -22,6 +22,8 @@ require (
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 )
 
+require github.com/tj/go-semver v1.0.0
+
 require (
 	git.mills.io/prologic/msgbus v0.1.19 // indirect
 	github.com/ScaleFT/sshkeys v0.0.0-20200327173127-6142f742bca5 // indirect

@@ -4,43 +4,149 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/tj/go-semver"
+
+	"github.com/oklog/ulid/v2"
 	"github.com/sour-is/ev/pkg/es/event"
 )
 
-type Request struct{
+type Request struct {
 	event.AggregateRoot
 
-	RequestIP string `json:"req_ip"`
-	Hidden    bool   `json:"hide,omitempty"`
+	RequestID string    `json:"req_id"`
+	RequestIP string    `json:"req_ip"`
+	Hidden    bool      `json:"hide,omitempty"`
+	Created   time.Time `json:"req_created"`
 
 	Responses []Response `json:"responses"`
 }
 
 var _ event.Aggregate = (*Request)(nil)
+
 func (a *Request) ApplyEvent(lis ...event.Event) {
 	for _, e := range lis {
-		switch e:=e.(type) {
+		switch e := e.(type) {
 		case *RequestSubmitted:
+			a.RequestID = e.eventMeta.EventID.String()
 			a.RequestIP = e.RequestIP
 			a.Hidden = e.Hidden
+			a.Created = ulid.Time(e.EventMeta().EventID.Time())
 		case *ResultSubmitted:
-				a.Responses = append(a.Responses, Response{
-					PeerID: e.PeerID,
-					PeerVersion: e.PeerVersion,
-					Latency: e.Latency,
-				})
+			a.Responses = append(a.Responses, Response{
+				PeerID:        e.PeerID,
+				ScriptVersion: e.PeerVersion,
+				Latency:       e.Latency,
+				Jitter:        e.Jitter,
+				MinRTT:        e.MinRTT,
+				MaxRTT:        e.MaxRTT,
+				Sent:          e.Sent,
+				Received:      e.Received,
+				Unreachable:   e.Unreachable,
+				Created:       ulid.Time(e.EventMeta().EventID.Time()),
+			})
 		}
 	}
 }
 
+type Time time.Time
+
+func (t *Time) UnmarshalJSON(b []byte) error {
+	time, err := time.Parse(`"2006-01-02 15:04:05"`, string(b))
+	*t = Time(time)
+	return err
+}
+func (t *Time) MarshalJSON() ([]byte, error) {
+	if t == nil {
+		return nil, nil
+	}
+	i := *t
+	return time.Time(i).MarshalJSON()
+}
+
+type ipFamily string
+
+const (
+	ipFamilyV4   ipFamily = "IPv4"
+	ipFamilyV6   ipFamily = "IPv6"
+	ipFamilyBoth ipFamily = "both"
+	ipFamilyNone ipFamily = "none"
+)
+
+func (t *ipFamily) UnmarshalJSON(b []byte) error {
+	i, err := strconv.Atoi(strings.Trim(string(b), `"`))
+	switch i {
+	case 1:
+		*t = ipFamilyV4
+	case 2:
+		*t = ipFamilyV6
+	case 3:
+		*t = ipFamilyBoth
+	default:
+		*t = ipFamilyNone
+	}
+	return err
+}
+
+type peerType []string
+
+func (t *peerType) UnmarshalJSON(b []byte) error {
+	*t = strings.Split(strings.Trim(string(b), `"`), ",")
+	return nil
+}
+
+type Peer struct {
+	ID      string   `json:"peer_id,omitempty"`
+	Owner   string   `json:"peer_owner"`
+	Nick    string   `json:"peer_nick"`
+	Name    string   `json:"peer_name"`
+	Country string   `json:"peer_country"`
+	Note    string   `json:"peer_note"`
+	Family  ipFamily `json:"peer_family"`
+	Type    peerType `json:"peer_type"`
+	Created Time     `json:"peer_created"`
+}
+
+func (p *Peer) CanSupport(ip string) bool {
+	addr := net.ParseIP(ip)
+	if addr == nil {
+		return false
+	}
+	if !addr.IsGlobalUnicast() {
+		return false
+	}
+
+	switch p.Family {
+	case ipFamilyV4:
+		return addr.To4() != nil
+	case ipFamilyV6:
+		return addr.To16() != nil
+	case ipFamilyNone:
+		return false
+	}
+
+	return true
+}
+
 type Response struct {
-	PeerID      string  `json:"peer_id"`
-	PeerVersion string  `json:"peer_version"`
-	Latency     float64 `json:"latency,omitempty"`
+	Peer          *Peer  `json:"peer"`
+	PeerID        string `json:"-"`
+	ScriptVersion string `json:"peer_scriptver"`
+
+	Latency     float64 `json:"res_latency"`
+	Jitter      float64 `json:"res_jitter,omitempty"`
+	MaxRTT      float64 `json:"res_maxrtt,omitempty"`
+	MinRTT      float64 `json:"res_minrtt,omitempty"`
+	Sent        int     `json:"res_sent,omitempty"`
+	Received    int     `json:"res_recv,omitempty"`
+	Unreachable bool    `json:"unreachable,omitempty"`
+
+	Created time.Time `json:"res_created"`
 }
 
 type RequestSubmitted struct {
@@ -131,6 +237,12 @@ type ResultSubmitted struct {
 	PeerID      string  `json:"peer_id"`
 	PeerVersion string  `json:"peer_version"`
 	Latency     float64 `json:"latency,omitempty"`
+	Jitter      float64 `json:"jitter,omitempty"`
+	MaxRTT      float64 `json:"maxrtt,omitempty"`
+	MinRTT      float64 `json:"minrtt,omitempty"`
+	Sent        int     `json:"res_sent,omitempty"`
+	Received    int     `json:"res_recv,omitempty"`
+	Unreachable bool    `json:"unreachable,omitempty"`
 }
 
 func (r *ResultSubmitted) Created() time.Time {
@@ -185,10 +297,17 @@ func (a *Info) MarshalEnviron() ([]byte, error) {
 
 	return b.Bytes(), nil
 }
-func (a *Info) OnCreate() error {
+func (a *Info) OnUpsert() error {
 	if a.StreamVersion() == 0 {
 		event.Raise(a, &VersionChanged{ScriptVersion: initVersion})
 	}
+	current, _ := semver.Parse(initVersion)
+	previous, _ := semver.Parse(a.ScriptVersion)
+
+	if current.Compare(previous) > 0 {
+		event.Raise(a, &VersionChanged{ScriptVersion: initVersion})
+	}
+
 	return nil
 }
 

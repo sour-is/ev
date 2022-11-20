@@ -58,25 +58,28 @@ type ComplexityRoot struct {
 	}
 
 	Event struct {
-		Bytes   func(childComplexity int) int
-		Created func(childComplexity int) int
-		EventID func(childComplexity int) int
-		ID      func(childComplexity int) int
-		Linked  func(childComplexity int) int
-		Meta    func(childComplexity int) int
-		Type    func(childComplexity int) int
-		Values  func(childComplexity int) int
+		Bytes    func(childComplexity int) int
+		Created  func(childComplexity int) int
+		EventID  func(childComplexity int) int
+		ID       func(childComplexity int) int
+		Linked   func(childComplexity int) int
+		Meta     func(childComplexity int) int
+		Position func(childComplexity int) int
+		StreamID func(childComplexity int) int
+		Type     func(childComplexity int) int
+		Values   func(childComplexity int) int
 	}
 
 	Meta struct {
-		Created    func(childComplexity int) int
-		GetEventID func(childComplexity int) int
-		Position   func(childComplexity int) int
-		StreamID   func(childComplexity int) int
+		ActualPosition func(childComplexity int) int
+		ActualStreamID func(childComplexity int) int
+		Created        func(childComplexity int) int
+		GetEventID     func(childComplexity int) int
 	}
 
 	Mutation struct {
 		CreateSaltyUser func(childComplexity int, nick string, pubkey string) int
+		TruncateStream  func(childComplexity int, streamID string, index int64) int
 	}
 
 	PageInfo struct {
@@ -118,6 +121,7 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
+	TruncateStream(ctx context.Context, streamID string, index int64) (bool, error)
 	CreateSaltyUser(ctx context.Context, nick string, pubkey string) (*salty.SaltyUser, error)
 }
 type QueryResolver interface {
@@ -201,6 +205,20 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Event.Meta(childComplexity), true
 
+	case "Event.position":
+		if e.complexity.Event.Position == nil {
+			break
+		}
+
+		return e.complexity.Event.Position(childComplexity), true
+
+	case "Event.streamID":
+		if e.complexity.Event.StreamID == nil {
+			break
+		}
+
+		return e.complexity.Event.StreamID(childComplexity), true
+
 	case "Event.type":
 		if e.complexity.Event.Type == nil {
 			break
@@ -214,6 +232,20 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Event.Values(childComplexity), true
+
+	case "Meta.position":
+		if e.complexity.Meta.ActualPosition == nil {
+			break
+		}
+
+		return e.complexity.Meta.ActualPosition(childComplexity), true
+
+	case "Meta.streamID":
+		if e.complexity.Meta.ActualStreamID == nil {
+			break
+		}
+
+		return e.complexity.Meta.ActualStreamID(childComplexity), true
 
 	case "Meta.created":
 		if e.complexity.Meta.Created == nil {
@@ -229,20 +261,6 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Meta.GetEventID(childComplexity), true
 
-	case "Meta.position":
-		if e.complexity.Meta.Position == nil {
-			break
-		}
-
-		return e.complexity.Meta.Position(childComplexity), true
-
-	case "Meta.streamID":
-		if e.complexity.Meta.StreamID == nil {
-			break
-		}
-
-		return e.complexity.Meta.StreamID(childComplexity), true
-
 	case "Mutation.createSaltyUser":
 		if e.complexity.Mutation.CreateSaltyUser == nil {
 			break
@@ -254,6 +272,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Mutation.CreateSaltyUser(childComplexity, args["nick"].(string), args["pubkey"].(string)), true
+
+	case "Mutation.truncateStream":
+		if e.complexity.Mutation.TruncateStream == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_truncateStream_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.TruncateStream(childComplexity, args["streamID"].(string), args["index"].(int64)), true
 
 	case "PageInfo.begin":
 		if e.complexity.PageInfo.Begin == nil {
@@ -502,13 +532,16 @@ var sources = []*ast.Source{
 	{Name: "../../../pkg/es/es.graphqls", Input: `
 type Meta @goModel(model: "github.com/sour-is/ev/pkg/es/event.Meta") {
     eventID: String! @goField(name: "getEventID")
-    streamID: String!
+    streamID: String! @goField(name: "ActualStreamID")
+    position: Int! @goField(name: "ActualPosition")
     created: Time!
-    position: Int!
 }
 
 extend type Query {
     events(streamID: String! paging: PageInput): Connection!
+}
+extend type Mutation {
+    truncateStream(streamID: String! index:Int!): Boolean!
 }
 extend type Subscription {
     """after == 0 start from begining, after == -1 start from end"""
@@ -519,6 +552,9 @@ type Event implements Edge @goModel(model: "github.com/sour-is/ev/pkg/es.GQLEven
     id: ID!
 
     eventID: String!
+    streamID: String!
+    position: Int!
+
     values: Map!
     bytes: String!
     type: String!
@@ -641,6 +677,30 @@ func (ec *executionContext) field_Mutation_createSaltyUser_args(ctx context.Cont
 		}
 	}
 	args["pubkey"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_truncateStream_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["streamID"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("streamID"))
+		arg0, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["streamID"] = arg0
+	var arg1 int64
+	if tmp, ok := rawArgs["index"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("index"))
+		arg1, err = ec.unmarshalNInt2int64(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["index"] = arg1
 	return args, nil
 }
 
@@ -994,6 +1054,94 @@ func (ec *executionContext) fieldContext_Event_eventID(ctx context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Event_streamID(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Event_streamID(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.StreamID(), nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Event_streamID(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Event",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Event_position(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Event_position(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Position(), nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(uint64)
+	fc.Result = res
+	return ec.marshalNInt2uint64(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Event_position(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Event",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Event_values(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_values(ctx, field)
 	if err != nil {
@@ -1213,10 +1361,10 @@ func (ec *executionContext) fieldContext_Event_meta(ctx context.Context, field g
 				return ec.fieldContext_Meta_eventID(ctx, field)
 			case "streamID":
 				return ec.fieldContext_Meta_streamID(ctx, field)
-			case "created":
-				return ec.fieldContext_Meta_created(ctx, field)
 			case "position":
 				return ec.fieldContext_Meta_position(ctx, field)
+			case "created":
+				return ec.fieldContext_Meta_created(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Meta", field.Name)
 		},
@@ -1264,6 +1412,10 @@ func (ec *executionContext) fieldContext_Event_linked(ctx context.Context, field
 				return ec.fieldContext_Event_id(ctx, field)
 			case "eventID":
 				return ec.fieldContext_Event_eventID(ctx, field)
+			case "streamID":
+				return ec.fieldContext_Event_streamID(ctx, field)
+			case "position":
+				return ec.fieldContext_Event_position(ctx, field)
 			case "values":
 				return ec.fieldContext_Event_values(ctx, field)
 			case "bytes":
@@ -1341,7 +1493,7 @@ func (ec *executionContext) _Meta_streamID(ctx context.Context, field graphql.Co
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.StreamID, nil
+		return obj.ActualStreamID, nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1366,6 +1518,50 @@ func (ec *executionContext) fieldContext_Meta_streamID(ctx context.Context, fiel
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Meta_position(ctx context.Context, field graphql.CollectedField, obj *event.Meta) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Meta_position(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ActualPosition, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(uint64)
+	fc.Result = res
+	return ec.marshalNInt2uint64(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Meta_position(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Meta",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -1415,8 +1611,8 @@ func (ec *executionContext) fieldContext_Meta_created(ctx context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Meta_position(ctx context.Context, field graphql.CollectedField, obj *event.Meta) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_Meta_position(ctx, field)
+func (ec *executionContext) _Mutation_truncateStream(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_truncateStream(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -1429,7 +1625,7 @@ func (ec *executionContext) _Meta_position(ctx context.Context, field graphql.Co
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Position, nil
+		return ec.resolvers.Mutation().TruncateStream(rctx, fc.Args["streamID"].(string), fc.Args["index"].(int64))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1441,20 +1637,31 @@ func (ec *executionContext) _Meta_position(ctx context.Context, field graphql.Co
 		}
 		return graphql.Null
 	}
-	res := resTmp.(uint64)
+	res := resTmp.(bool)
 	fc.Result = res
-	return ec.marshalNInt2uint64(ctx, field.Selections, res)
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_Meta_position(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_truncateStream(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "Meta",
+		Object:     "Mutation",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_truncateStream_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return
 	}
 	return fc, nil
 }
@@ -1914,10 +2121,10 @@ func (ec *executionContext) fieldContext_PostEvent_meta(ctx context.Context, fie
 				return ec.fieldContext_Meta_eventID(ctx, field)
 			case "streamID":
 				return ec.fieldContext_Meta_streamID(ctx, field)
-			case "created":
-				return ec.fieldContext_Meta_created(ctx, field)
 			case "position":
 				return ec.fieldContext_Meta_position(ctx, field)
+			case "created":
+				return ec.fieldContext_Meta_created(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Meta", field.Name)
 		},
@@ -2470,6 +2677,10 @@ func (ec *executionContext) fieldContext_Subscription_eventAdded(ctx context.Con
 				return ec.fieldContext_Event_id(ctx, field)
 			case "eventID":
 				return ec.fieldContext_Event_eventID(ctx, field)
+			case "streamID":
+				return ec.fieldContext_Event_streamID(ctx, field)
+			case "position":
+				return ec.fieldContext_Event_position(ctx, field)
 			case "values":
 				return ec.fieldContext_Event_values(ctx, field)
 			case "bytes":
@@ -4529,6 +4740,20 @@ func (ec *executionContext) _Event(ctx context.Context, sel ast.SelectionSet, ob
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&invalids, 1)
 			}
+		case "streamID":
+
+			out.Values[i] = ec._Event_streamID(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&invalids, 1)
+			}
+		case "position":
+
+			out.Values[i] = ec._Event_position(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&invalids, 1)
+			}
 		case "values":
 
 			out.Values[i] = ec._Event_values(ctx, field, obj)
@@ -4616,16 +4841,16 @@ func (ec *executionContext) _Meta(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				invalids++
 			}
-		case "created":
+		case "position":
 
-			out.Values[i] = ec._Meta_created(ctx, field, obj)
+			out.Values[i] = ec._Meta_position(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
 				invalids++
 			}
-		case "position":
+		case "created":
 
-			out.Values[i] = ec._Meta_position(ctx, field, obj)
+			out.Values[i] = ec._Meta_created(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
 				invalids++
@@ -4660,6 +4885,15 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Mutation")
+		case "truncateStream":
+
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_truncateStream(ctx, field)
+			})
+
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		case "createSaltyUser":
 
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
