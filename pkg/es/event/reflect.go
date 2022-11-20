@@ -67,7 +67,7 @@ func (u *UnknownEvent) MarshalBinary() ([]byte, error) {
 
 // Register a type container for Unmarshalling values into. The type must implement Event and not be a nil value.
 func Register(ctx context.Context, lis ...Event) error {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	for _, e := range lis {
@@ -84,7 +84,7 @@ func Register(ctx context.Context, lis ...Event) error {
 	return nil
 }
 func RegisterName(ctx context.Context, name string, e Event) error {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	if e == nil {
@@ -119,7 +119,7 @@ func RegisterName(ctx context.Context, name string, e Event) error {
 	return nil
 }
 func GetContainer(ctx context.Context, s string) Event {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	var e Event
@@ -176,7 +176,7 @@ func MarshalBinary(e Event) (txt []byte, err error) {
 }
 
 func UnmarshalBinary(ctx context.Context, txt []byte, pos uint64) (e Event, err error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	sp := bytes.SplitN(txt, []byte{'\t'}, 4)
@@ -194,6 +194,8 @@ func UnmarshalBinary(ctx context.Context, txt []byte, pos uint64) (e Event, err 
 
 	m.StreamID = string(sp[1])
 	m.Position = pos
+	m.ActualStreamID = string(sp[1])
+	m.ActualPosition = pos
 
 	eventType := string(sp[2])
 	e = GetContainer(ctx, eventType)

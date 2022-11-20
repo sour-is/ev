@@ -5,13 +5,14 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type state struct {
@@ -89,10 +90,16 @@ func (s *streamer) Send(ctx context.Context, streamID string, events event.Event
 
 		for _, sub := range state.subscribers[streamID] {
 			err := sub.position.Modify(ctx, func(ctx context.Context, position *position) error {
-				_, span := lg.Span(ctx)
+				ctx, span := lg.Span(ctx)
 				defer span.End()
+				span.SetAttributes(
+					attribute.String("streamID", streamID),
+					attribute.Int64("actualPosition", int64(events.Last().EventMeta().ActualPosition)),
+					attribute.String("actualStreamID", events.Last().EventMeta().ActualStreamID),
+					attribute.Int64("position", int64(events.Last().EventMeta().Position)),
+				)
 
-				position.size = int64(events.Last().EventMeta().Position - uint64(position.idx))
+				position.size = int64(events.Last().EventMeta().ActualPosition - uint64(position.idx))
 
 				if position.wait != nil {
 					close(position.wait)
@@ -142,6 +149,9 @@ type wrapper struct {
 
 var _ driver.EventLog = (*wrapper)(nil)
 
+func (r *wrapper) Unwrap() driver.EventLog {
+	return r.up
+}
 func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -184,19 +194,6 @@ func (w *wrapper) LastIndex(ctx context.Context) (uint64, error) {
 	defer span.End()
 
 	return w.up.LastIndex(ctx)
-}
-func (w *wrapper) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
-	ctx, span := lg.Span(ctx)
-	defer span.End()
-
-	up := w.up
-	for up != nil {
-		if up, ok := up.(driver.EventLogWithUpdate); ok {
-			return up.LoadForUpdate(ctx, a, fn)
-		}
-		up = es.Unwrap(up)
-	}
-	return 0, es.ErrNoDriver
 }
 
 type position struct {
@@ -280,8 +277,15 @@ func (s *subscription) Events(ctx context.Context) (event.Events, error) {
 		}
 		position.size = int64(len(events))
 		if len(events) > 0 {
-			position.idx = int64(events.First().EventMeta().Position - 1)
+			position.idx = int64(events.First().EventMeta().ActualPosition - 1)
 		}
+		span.SetAttributes(
+			attribute.Int64("position.idx", position.idx),
+			attribute.Int64("position.size", position.size),
+			attribute.Int64("meta.ActualPosition", int64(events.First().EventMeta().ActualPosition)),
+			attribute.Int64("meta.Position", int64(events.First().EventMeta().Position)),
+		)
+
 		return err
 	})
 }

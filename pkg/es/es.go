@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.uber.org/multierr"
+
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric/instrument/syncint64"
-	"go.uber.org/multierr"
 )
 
 type config struct {
@@ -194,7 +195,7 @@ func (es *EventStore) ReadN(ctx context.Context, streamID string, index ...uint6
 	defer span.End()
 
 	lis := make([]int64, len(index))
-	for i,j :=range index {
+	for i, j := range index {
 		lis[i] = int64(j)
 	}
 
@@ -231,6 +232,7 @@ func (es *EventStore) Append(ctx context.Context, streamID string, events event.
 func (es *EventStore) FirstIndex(ctx context.Context, streamID string) (uint64, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+
 	span.SetAttributes(
 		attribute.String("ev.streamID", streamID),
 	)
@@ -244,6 +246,7 @@ func (es *EventStore) FirstIndex(ctx context.Context, streamID string) (uint64, 
 func (es *EventStore) LastIndex(ctx context.Context, streamID string) (uint64, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
+
 	span.SetAttributes(
 		attribute.String("ev.streamID", streamID),
 	)
@@ -267,6 +270,23 @@ func (es *EventStore) EventStream() driver.EventStream {
 		d = Unwrap(d)
 	}
 	return nil
+}
+func (es *EventStore) Truncate(ctx context.Context, streamID string, index int64) error {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+	
+	up, err := es.Driver.EventLog(ctx, streamID)
+	if err != nil {
+		return err
+	}
+
+	for up != nil {
+		if up, ok := up.(driver.EventLogWithTruncate); ok {
+			return up.Truncate(ctx, index)
+		}
+		up = Unwrap(up)
+	}
+	return ErrNoDriver
 }
 
 func Unwrap[T any](t T) T {

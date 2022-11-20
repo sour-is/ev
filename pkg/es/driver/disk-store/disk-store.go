@@ -6,11 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/tidwall/wal"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
 	"go.uber.org/multierr"
 
@@ -43,7 +45,7 @@ const AppendOnly = es.AppendOnly
 const AllEvents = es.AllEvents
 
 func Init(ctx context.Context) error {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	d := &diskStore{}
@@ -74,6 +76,10 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 	_, span := lg.Span(ctx)
 	defer span.End()
 
+	span.SetAttributes(
+		attribute.String("args.dsn", dsn),
+	)
+
 	scheme, path, ok := strings.Cut(dsn, ":")
 	if !ok {
 		return nil, fmt.Errorf("expected scheme")
@@ -91,11 +97,11 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 		}
 	}
 	c, err := cache.NewWithEvict(CachSize, func(ctx context.Context, s string, l *lockedWal) {
-		_, span := lg.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
 		l.Modify(ctx, func(ctx context.Context, w *wal.Log) error {
-			_, span := lg.Span(ctx)
+			ctx, span := lg.Span(ctx)
 			defer span.End()
 
 			d.m_disk_evict.Add(ctx, 1)
@@ -123,13 +129,18 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 	}, nil
 }
 func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("args.streamID", streamID),
+		attribute.String("path", d.path),
+	)
 
 	el := &eventLog{streamID: streamID, diskStore: d}
 
 	return el, d.openlogs.Modify(ctx, func(ctx context.Context, openlogs *openlogs) error {
-		_, span := lg.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
 		if events, ok := openlogs.logs.Get(streamID); ok {
@@ -139,7 +150,16 @@ func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.Event
 
 		d.m_disk_open.Add(ctx, 1)
 
-		l, err := wal.Open(filepath.Join(d.path, streamID), wal.DefaultOptions)
+		// migrate streams into dir friendly subdirs
+		hashPart := mkDirName(streamID)
+		oldPath := filepath.Join(d.path, streamID)
+		newPath := filepath.Join(d.path, hashPart, streamID)
+		if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+			os.MkdirAll(filepath.Join(d.path, hashPart), 0700)
+			os.Rename(oldPath, newPath)
+		}
+
+		l, err := wal.Open(newPath, wal.DefaultOptions)
 		if err != nil {
 			span.RecordError(err)
 			return err
@@ -160,14 +180,22 @@ type eventLog struct {
 var _ driver.EventLog = (*eventLog)(nil)
 
 func (e *eventLog) Append(ctx context.Context, events event.Events, version uint64) (uint64, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int("args.events", len(events)),
+		attribute.Int64("args.version", int64(version)),
+		attribute.String("streamID", e.streamID),
+		attribute.String("path", e.diskStore.path),
+
+	)
 
 	event.SetStreamID(e.streamID, events...)
 
 	var count uint64
 	err := e.events.Modify(ctx, func(ctx context.Context, l *wal.Log) error {
-		_, span := lg.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
 		last, err := l.LastIndex()
@@ -210,13 +238,19 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 	return count, err
 }
 func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+	span.SetAttributes(
+		attribute.Int64("args.after", after),
+		attribute.Int64("args.count", count),
+		attribute.String("streamID", e.streamID),
+		attribute.String("path", e.diskStore.path),
+	)
 
 	var events event.Events
 
 	err := e.events.Modify(ctx, func(ctx context.Context, stream *wal.Log) error {
-		_, span := lg.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
 		first, err := stream.FirstIndex()
@@ -239,9 +273,17 @@ func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, 
 			return nil
 		}
 
+		span.SetAttributes(
+			attribute.Int64("first", int64(first)),
+			attribute.Int64("last", int64(last)),
+			attribute.Int64("start", int64(start)),
+			attribute.Int64("count", int64(count)),
+			attribute.Int64("after", int64(after)),
+
+		)
+
 		events = make([]event.Event, math.Abs(count))
 		for i := range events {
-			span.AddEvent(fmt.Sprintf("read event %d of %d", i, len(events)))
 
 			// ---
 			events[i], err = readStream(ctx, stream, start)
@@ -250,6 +292,7 @@ func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, 
 				return err
 			}
 			// ---
+			span.AddEvent(fmt.Sprintf("read event %d of %d - %d", i, len(events), events[i].EventMeta().ActualPosition))
 
 			if count > 0 {
 				start += 1
@@ -274,8 +317,19 @@ func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, 
 	return events, nil
 }
 func (e *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	lis := make([]int64, len(index))
+	for i := range index {
+		lis[i]=int64(index[i])
+	}
+
+	span.SetAttributes(
+		attribute.Int64Slice("args.index", lis),
+		attribute.String("streamID", e.streamID),
+		attribute.String("path", e.diskStore.path),
+	)
 
 	var events event.Events
 	err := e.events.Modify(ctx, func(ctx context.Context, stream *wal.Log) error {
@@ -289,8 +343,13 @@ func (e *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, er
 	return events, err
 }
 func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+	
+	span.SetAttributes(
+		attribute.String("streamID", e.streamID),
+		attribute.String("path", e.diskStore.path),
+	)
 
 	var idx uint64
 	var err error
@@ -303,8 +362,13 @@ func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	return idx, err
 }
 func (e *eventLog) LastIndex(ctx context.Context) (uint64, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("streamID", e.streamID),
+		attribute.String("path", e.diskStore.path),
+	)
 
 	var idx uint64
 	var err error
@@ -316,12 +380,33 @@ func (e *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 
 	return idx, err
 }
-func (e *eventLog) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
-	panic("not implemented")
+func (e *eventLog) Truncate(ctx context.Context, index int64) error {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+	
+	span.SetAttributes(
+		attribute.Int64("args.index", index),
+		attribute.String("streamID", e.streamID),
+		attribute.String("path", e.diskStore.path),
+	)
+
+	if index == 0 {
+		return nil
+	}
+	return e.events.Modify(ctx, func(ctx context.Context, events *wal.Log) error {
+		if index < 0 {
+			return events.TruncateBack(uint64(-index))
+		}
+		return events.TruncateFront(uint64(index))
+	})
 }
 func readStream(ctx context.Context, stream *wal.Log, index uint64) (event.Event, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("args.index", int64(index)),
+	)
 
 	var b []byte
 	var err error
@@ -342,8 +427,17 @@ func readStream(ctx context.Context, stream *wal.Log, index uint64) (event.Event
 	return e, err
 }
 func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.Events, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	lis := make([]int64, len(index))
+	for i := range index {
+		lis[i]=int64(index[i])
+	}
+
+	span.SetAttributes(
+		attribute.Int64Slice("args.index", lis),
+	)
 
 	var b []byte
 	var err error
@@ -365,4 +459,9 @@ func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.E
 		}
 	}
 	return events, err
+}
+func mkDirName(name string) string {
+	h := fnv.New32a()
+	fmt.Fprint(h, name)
+	return fmt.Sprintf("%x/%x/%x", h.Sum32()>>24&0xff, h.Sum32()>>16&0xff, h.Sum32()&0xffff)
 }

@@ -107,6 +107,9 @@ func SetStreamID(id string, lis ...Event) {
 	for _, e := range lis {
 		meta := e.EventMeta()
 		meta.StreamID = id
+		if meta.ActualStreamID == "" {
+			meta.ActualStreamID = id
+		}
 		e.SetEventMeta(meta)
 	}
 }
@@ -122,13 +125,16 @@ func SetEventID(e Event, id ulid.ULID) {
 func SetPosition(e Event, i uint64) {
 	meta := e.EventMeta()
 	meta.Position = i
+	meta.ActualPosition = i
 	e.SetEventMeta(meta)
 }
 
 type Meta struct {
-	EventID  ulid.ULID
-	StreamID string
-	Position uint64
+	EventID        ulid.ULID
+	StreamID       string
+	Position       uint64
+	ActualStreamID string
+	ActualPosition uint64
 }
 
 func (m Meta) Created() time.Time {
@@ -146,11 +152,10 @@ func Init(ctx context.Context) error {
 	return nil
 }
 
-type nilEvent struct{}
-
-func (*nilEvent) EventMeta() Meta {
-	return Meta{}
+type nilEvent struct {
 }
+
+func (*nilEvent) EventMeta() Meta             { return Meta{} }
 func (*nilEvent) SetEventMeta(eventMeta Meta) {}
 
 var NilEvent = &nilEvent{}

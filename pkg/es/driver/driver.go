@@ -19,6 +19,10 @@ type EventLog interface {
 	FirstIndex(context.Context) (uint64, error)
 	LastIndex(context.Context) (uint64, error)
 }
+type EventLogWithTruncate interface {
+	Truncate(context.Context, int64) error
+}
+
 type EventLogWithUpdate interface {
 	LoadForUpdate(context.Context, event.Aggregate, func(context.Context, event.Aggregate) error) (uint64, error)
 }

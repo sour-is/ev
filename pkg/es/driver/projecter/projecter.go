@@ -47,6 +47,9 @@ type wrapper struct {
 
 var _ driver.EventLog = (*wrapper)(nil)
 
+func (r *wrapper) Unwrap() driver.EventLog {
+	return r.up
+}
 func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -114,19 +117,7 @@ func (w *wrapper) LastIndex(ctx context.Context) (uint64, error) {
 
 	return w.up.LastIndex(ctx)
 }
-func (w *wrapper) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func(context.Context, event.Aggregate) error) (uint64, error) {
-	ctx, span := lg.Span(ctx)
-	defer span.End()
 
-	up := w.up
-	for up != nil {
-		if up, ok := up.(driver.EventLogWithUpdate); ok {
-			return up.LoadForUpdate(ctx, a, fn)
-		}
-		up = es.Unwrap(up)
-	}
-	return 0, es.ErrNoDriver
-}
 
 func DefaultProjection(e event.Event) []event.Event {
 	m := e.EventMeta()

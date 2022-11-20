@@ -2,6 +2,7 @@ package resolvelinks
 
 import (
 	"context"
+	"errors"
 
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
@@ -43,6 +44,9 @@ type wrapper struct {
 	resolvelinks *resolvelinks
 }
 
+func (r *wrapper) Unwrap() driver.EventLog {
+	return r.up
+}
 func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -60,11 +64,18 @@ func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Eve
 				return nil, err
 			}
 			lis, err := d.ReadN(ctx, e.Pos)
-			if err != nil {
+			if err != nil && !errors.Is(err, es.ErrNotFound) {
 				return nil, err
 			}
 
-			events[i] = lis.First()
+			if ne := lis.First(); ne != event.NilEvent {
+				meta := ne.EventMeta()
+				actual := e.EventMeta()
+				meta.ActualPosition = actual.Position
+				meta.ActualStreamID = actual.ActualStreamID
+				ne.SetEventMeta(meta)
+				events[i] = ne
+			}
 		}
 	}
 
@@ -92,7 +103,14 @@ func (w *wrapper) ReadN(ctx context.Context, index ...uint64) (event.Events, err
 				return nil, err
 			}
 
-			events[i] = lis.First()
+			ne := lis.First()
+			meta := ne.EventMeta()
+			actual := e.EventMeta()
+			meta.ActualPosition = actual.Position
+			meta.ActualStreamID = actual.ActualStreamID
+			ne.SetEventMeta(meta)
+
+			events[i] = ne
 		}
 	}
 

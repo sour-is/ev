@@ -15,6 +15,7 @@ import (
 type EventResolver interface {
 	Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error)
 	EventAdded(ctx context.Context, streamID string, after int64) (<-chan *GQLEvent, error)
+	TruncateStream(ctx context.Context, streamID string, index int64) (bool, error)
 }
 type contextKey struct {
 	name string
@@ -112,11 +113,21 @@ func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int6
 
 	return ch, nil
 }
+func (es *EventStore) TruncateStream(ctx context.Context, streamID string, index int64) (bool, error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+
+	err := es.Truncate(ctx, streamID, index)
+	return err == nil, err
+}
 func (*EventStore) RegisterHTTP(*http.ServeMux) {}
 func (e *EventStore) GetMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r = r.WithContext(gql.ToContext(r.Context(), esKey, e))
+			ctx, span := lg.Span(r.Context())
+			defer span.End()
+
+			r = r.WithContext(gql.ToContext(ctx, esKey, e))
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -131,6 +142,12 @@ func (e *GQLEvent) ID() string {
 }
 func (e *GQLEvent) EventID() string {
 	return e.e.EventMeta().GetEventID()
+}
+func (e *GQLEvent) StreamID() string {
+	return e.e.EventMeta().StreamID
+}
+func (e *GQLEvent) Position() uint64 {
+	return e.e.EventMeta().Position
 }
 func (e *GQLEvent) Type() string {
 	return event.TypeOf(e.e)
@@ -150,6 +167,9 @@ func (e *GQLEvent) Meta() *event.Meta {
 	return &meta
 }
 func (e *GQLEvent) Linked(ctx context.Context) (*GQLEvent, error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+
 	values := event.Values(e.e)
 	streamID, ok := values["stream_id"].(string)
 	if !ok {

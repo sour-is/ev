@@ -77,7 +77,7 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 	event.SetStreamID(m.streamID, events...)
 
 	return uint64(len(events)), m.events.Modify(ctx, func(ctx context.Context, stream *event.Events) error {
-		_, span := lg.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
 		span.AddEvent(fmt.Sprintf(" %s %d", m.streamID, len(*stream)))
@@ -113,7 +113,7 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 
 // ReadOne implements readone
 func (m *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	var events event.Events
@@ -136,7 +136,7 @@ func (m *eventLog) Read(ctx context.Context, after int64, count int64) (event.Ev
 	var events event.Events
 
 	err := m.events.Modify(ctx, func(ctx context.Context, stream *event.Events) error {
-		_, span := lg.Span(ctx)
+		ctx, span := lg.Span(ctx)
 		defer span.End()
 
 		span.AddEvent(fmt.Sprintf("%s %d", m.streamID, len(*stream)))
@@ -188,7 +188,7 @@ func (m *eventLog) Read(ctx context.Context, after int64, count int64) (event.Ev
 
 // FirstIndex for the streamID
 func (m *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	events, err := m.events.Copy(ctx)
@@ -197,7 +197,7 @@ func (m *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 
 // LastIndex for the streamID
 func (m *eventLog) LastIndex(ctx context.Context) (uint64, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	events, err := m.events.Copy(ctx)
@@ -209,7 +209,7 @@ func (m *eventLog) LoadForUpdate(ctx context.Context, a event.Aggregate, fn func
 }
 
 func readStream(ctx context.Context, stream *event.Events, index uint64) (event.Event, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	var b []byte
@@ -219,14 +219,14 @@ func readStream(ctx context.Context, stream *event.Events, index uint64) (event.
 	if err != nil {
 		return nil, err
 	}
-	e, err = event.UnmarshalBinary(ctx, b, e.EventMeta().Position)
+	e, err = event.UnmarshalBinary(ctx, b, e.EventMeta().ActualPosition)
 	if err != nil {
 		return nil, err
 	}
 	return e, err
 }
 func readStreamN(ctx context.Context, stream *event.Events, index ...uint64) (event.Events, error) {
-	_, span := lg.Span(ctx)
+	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	var b []byte
