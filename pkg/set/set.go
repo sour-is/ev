@@ -2,7 +2,10 @@ package set
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+
+	"github.com/sour-is/ev/pkg/math"
 )
 
 type Set[T comparable] map[T]struct{}
@@ -18,6 +21,19 @@ func (s Set[T]) Has(v T) bool {
 	_, ok := (s)[v]
 	return ok
 }
+func (s Set[T]) Add(items ...T) Set[T] {
+	for _, i := range items {
+		s[i] = struct{}{}
+	}
+	return s
+}
+func (s Set[T]) Delete(items ...T) Set[T] {
+	for _, i := range items {
+		delete(s, i)
+	}
+	return s
+}
+
 func (s Set[T]) String() string {
 	if s == nil {
 		return "set(<nil>)"
@@ -32,4 +48,67 @@ func (s Set[T]) String() string {
 	b.WriteString(strings.Join(lis, ","))
 	b.WriteString(")")
 	return b.String()
+}
+
+type ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64
+}
+
+type BoundSet[T ordered] struct {
+	min, max T
+	s        Set[T]
+}
+
+func NewBoundSet[T ordered](min, max T, items ...T) *BoundSet[T] {
+	return &BoundSet[T]{
+		min: min,
+		max: max,
+		s:   New(items...),
+	}
+}
+func (l *BoundSet[T]) Add(items ...T) *BoundSet[T] {
+	n := 0
+	for i := range items {
+		if items[i] >= l.min && items[i] <= l.max {
+			items[n] = items[i]
+			n++
+		}
+	}
+	l.s.Add(items[:n]...)
+	return l
+}
+func (l *BoundSet[T]) AddRange(min, max T) {
+	min = math.Max(min, l.min)
+	max = math.Min(max, l.max)
+	var lis []T
+	for ; min <= max; min++ {
+		lis = append(lis, min)
+	}
+	l.s.Add(lis...)
+}
+func (l *BoundSet[T]) Delete(items ...T) *BoundSet[T] {
+	n := 0
+	for i := range items {
+		if items[i] >= l.min && items[i] <= l.max {
+			items[n] = items[i]
+			n++
+		}
+	}
+	l.s.Delete(items[:n]...)
+	return l
+}
+func (l *BoundSet[T]) Has(v T) bool {
+	return l.s.Has(v)
+}
+func (l *BoundSet[T]) String() string {
+	lis := make([]string, len(l.s))
+	n := 0
+	for k := range l.s {
+		lis[n] = fmt.Sprint(k)
+		n++
+	}
+	sort.Strings(lis)
+	return strings.Join(lis, ",")
 }
