@@ -76,6 +76,8 @@ func TestPagerBox(t *testing.T) {
 		{1, 10, 10, 10, 0, 0},
 		{1, 10, 0, es.AllEvents, 1, 10},
 		{1, 10, -1, -es.AllEvents, 10, -10},
+
+		{5, 10, 0, 1, 5, 1},
 	}
 
 	for _, tt := range tests {

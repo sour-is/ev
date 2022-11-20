@@ -43,7 +43,11 @@ func PagerBox(first, last uint64, pos, count int64) (uint64, int64) {
 	var start uint64
 
 	if pos >= 0 {
-		start = first + uint64(pos)
+		if int64(first) > pos {
+			start = first
+		} else {
+			start = uint64(pos) + 1
+		}
 	} else {
 		start = uint64(int64(last) + pos + 1)
 	}
