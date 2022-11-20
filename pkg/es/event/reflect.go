@@ -124,7 +124,7 @@ func GetContainer(ctx context.Context, s string) Event {
 
 	var e Event
 
-	eventTypes.Modify(ctx, func(ctx context.Context,c *config) error {
+	eventTypes.Modify(ctx, func(ctx context.Context, c *config) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/keys-pub/keys"
+
 	"github.com/sour-is/ev/internal/lg"
 )
 

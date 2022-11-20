@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/rs/cors"
@@ -18,7 +17,6 @@ func httpMux(fns ...interface{ RegisterHTTP(*http.ServeMux) }) http.Handler {
 		fn.RegisterHTTP(mux.ServeMux)
 
 		if fn, ok := fn.(interface{ RegisterAPIv1(*http.ServeMux) }); ok {
-			log.Printf("register api %T", fn)
 			fn.RegisterAPIv1(mux.api)
 		}
 	}
@@ -36,6 +34,7 @@ func newMux() *mux {
 }
 
 type RegisterHTTP func(*http.ServeMux)
+
 func (fn RegisterHTTP) RegisterHTTP(mux *http.ServeMux) {
 	fn(mux)
 }

@@ -188,7 +188,6 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 		attribute.Int64("args.version", int64(version)),
 		attribute.String("streamID", e.streamID),
 		attribute.String("path", e.diskStore.path),
-
 	)
 
 	event.SetStreamID(e.streamID, events...)
@@ -279,7 +278,6 @@ func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, 
 			attribute.Int64("start", int64(start)),
 			attribute.Int64("count", int64(count)),
 			attribute.Int64("after", int64(after)),
-
 		)
 
 		events = make([]event.Event, math.Abs(count))
@@ -322,7 +320,7 @@ func (e *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, er
 
 	lis := make([]int64, len(index))
 	for i := range index {
-		lis[i]=int64(index[i])
+		lis[i] = int64(index[i])
 	}
 
 	span.SetAttributes(
@@ -345,7 +343,7 @@ func (e *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, er
 func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("streamID", e.streamID),
 		attribute.String("path", e.diskStore.path),
@@ -383,7 +381,7 @@ func (e *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 func (e *eventLog) Truncate(ctx context.Context, index int64) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.Int64("args.index", index),
 		attribute.String("streamID", e.streamID),
@@ -432,7 +430,7 @@ func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.E
 
 	lis := make([]int64, len(index))
 	for i := range index {
-		lis[i]=int64(index[i])
+		lis[i] = int64(index[i])
 	}
 
 	span.SetAttributes(

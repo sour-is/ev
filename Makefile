@@ -12,7 +12,7 @@ endif
 	air
 
 run:
-	go run .
+	go run  .
 
 test:
 	go test -cover -race ./...

@@ -11,6 +11,7 @@ import (
 
 	"github.com/keys-pub/keys"
 	"github.com/oklog/ulid/v2"
+
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
 )

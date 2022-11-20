@@ -274,7 +274,7 @@ func (es *EventStore) EventStream() driver.EventStream {
 func (es *EventStore) Truncate(ctx context.Context, streamID string, index int64) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
-	
+
 	up, err := es.Driver.EventLog(ctx, streamID)
 	if err != nil {
 		return err

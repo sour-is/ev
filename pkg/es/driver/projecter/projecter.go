@@ -118,7 +118,6 @@ func (w *wrapper) LastIndex(ctx context.Context) (uint64, error) {
 	return w.up.LastIndex(ctx)
 }
 
-
 func DefaultProjection(e event.Event) []event.Event {
 	m := e.EventMeta()
 	streamID := m.StreamID
