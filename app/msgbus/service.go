@@ -12,14 +12,15 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/gql"
 	"go.opentelemetry.io/otel/metric/instrument"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
 	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/multierr"
+
+	"github.com/sour-is/ev/internal/lg"
+	"github.com/sour-is/ev/pkg/es"
+	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/gql"
 )
 
 type service struct {
