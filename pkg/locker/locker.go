@@ -2,8 +2,10 @@ package locker
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/sour-is/ev/internal/lg"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type Locked[T any] struct {
@@ -20,8 +22,17 @@ func New[T any](initial *T) *Locked[T] {
 
 // Modify will call the function with the locked value
 func (s *Locked[T]) Modify(ctx context.Context, fn func(context.Context, *T) error) error {
-	_, span := lg.Span(ctx)
+	if s == nil {
+		return fmt.Errorf("locker not initialized")
+	}
+
+	ctx, span := lg.Span(ctx)
 	defer span.End()
+
+	var t T
+	span.SetAttributes(
+		attribute.String("typeOf", fmt.Sprintf("%T", t)),
+	)
 
 	if ctx.Err() != nil {
 		return ctx.Err()
