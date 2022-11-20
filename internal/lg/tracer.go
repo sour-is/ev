@@ -44,7 +44,6 @@ func attrs(ctx context.Context) (string, []attribute.KeyValue) {
 			attribute.String("pc", fmt.Sprintf("%v", pc)),
 			attribute.String("file", file),
 			attribute.Int("line", line),
-			attribute.String("name", name),
 		)
 	}
 	return name, attrs
@@ -52,6 +51,15 @@ func attrs(ctx context.Context) (string, []attribute.KeyValue) {
 
 func Span(ctx context.Context, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	name, attrs := attrs(ctx)
+	attrs = append(attrs, attribute.String("name", name))
+	ctx, span := Tracer(ctx).Start(ctx, name, opts...)
+	span.SetAttributes(attrs...)
+
+	return ctx, span
+}
+func NamedSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	_, attrs := attrs(ctx)
+	attrs = append(attrs, attribute.String("name", name))
 	ctx, span := Tracer(ctx).Start(ctx, name, opts...)
 	span.SetAttributes(attrs...)
 
@@ -151,7 +159,9 @@ func reverse[T any](s []T) {
 }
 
 func Htrace(h http.Handler, name string) http.Handler {
-	return otelhttp.NewHandler(h, name)
+	return otelhttp.NewHandler(h, name, otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+		return fmt.Sprintf("%s: %s", operation, r.RequestURI)
+	}))
 }
 
 func toContext[K comparable, V any](ctx context.Context, key K, value V) context.Context {
