@@ -4,6 +4,7 @@ package streamer
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -67,6 +68,7 @@ func (s *streamer) Subscribe(ctx context.Context, streamID string, start int64) 
 	if err != nil {
 		return nil, err
 	}
+
 	sub := &subscription{topic: streamID, events: events}
 	sub.position = locker.New(&position{
 		idx:  start,
@@ -86,12 +88,14 @@ func (s *streamer) Send(ctx context.Context, streamID string, events event.Event
 	return s.state.Modify(ctx, func(ctx context.Context, state *state) error {
 		ctx, span := lg.Span(ctx)
 		defer span.End()
+
 		span.AddEvent(fmt.Sprint("subscribers=", len(state.subscribers[streamID])))
 
 		for _, sub := range state.subscribers[streamID] {
 			err := sub.position.Modify(ctx, func(ctx context.Context, position *position) error {
 				ctx, span := lg.Span(ctx)
 				defer span.End()
+
 				span.SetAttributes(
 					attribute.String("streamID", streamID),
 					attribute.Int64("actualPosition", int64(events.Last().EventMeta().ActualPosition)),
@@ -106,6 +110,7 @@ func (s *streamer) Send(ctx context.Context, streamID string, events event.Event
 					position.link = trace.LinkFromContext(ctx, attribute.String("src", "event"))
 					position.wait = nil
 				}
+
 				return nil
 			})
 			if err != nil {
@@ -210,56 +215,65 @@ type subscription struct {
 
 	events driver.EventLog
 	unsub  func(context.Context) error
+	once   sync.Once
 }
 
-func (s *subscription) Recv(ctx context.Context) bool {
+func (s *subscription) Recv(ctx context.Context) <-chan bool {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	var wait func(context.Context) bool
+	done := make(chan bool)
 
-	err := s.position.Modify(ctx, func(ctx context.Context, position *position) error {
-		_, span := lg.Span(ctx)
-		defer span.End()
+	go func() {
+		var wait func(context.Context) bool
+		defer close(done)
 
-		if position.size == es.AllEvents {
-			return nil
-		}
-		if position.size == 0 {
-			position.wait = make(chan struct{})
-			wait = func(ctx context.Context) bool {
-				ctx, span := lg.Span(ctx)
-				defer span.End()
+		err := s.position.Modify(ctx, func(ctx context.Context, position *position) error {
+			_, span := lg.Span(ctx)
+			defer span.End()
 
-				select {
-				case <-position.wait:
-					if position.link.SpanContext.IsValid() {
-						_, span := lg.Span(ctx, trace.WithLinks(position.link))
-						span.AddEvent("recv event")
-						span.End()
-						position.link = trace.Link{}
+			if position.size == es.AllEvents {
+				return nil
+			}
+			if position.size == 0 {
+				position.wait = make(chan struct{})
+				wait = func(ctx context.Context) bool {
+					ctx, span := lg.Span(ctx)
+					defer span.End()
+
+					select {
+					case <-position.wait:
+						if position.link.SpanContext.IsValid() {
+							_, span := lg.Span(ctx, trace.WithLinks(position.link))
+							span.AddEvent("recv event")
+							span.End()
+							position.link = trace.Link{}
+						}
+						return true
+
+					case <-ctx.Done():
+						return false
 					}
-
-					return true
-				case <-ctx.Done():
-
-					return false
 				}
 			}
+			position.idx += position.size
+			position.size = 0
+			return nil
+		})
+		if err != nil {
+			done <- false
+			return
 		}
-		position.idx += position.size
-		position.size = 0
-		return nil
-	})
-	if err != nil {
-		return false
-	}
 
-	if wait != nil {
-		return wait(ctx)
-	}
+		if wait != nil {
+			done <- wait(ctx)
+			return
+		}
 
-	return true
+		done <- true
+	}()
+
+	return done
 }
 func (s *subscription) Events(ctx context.Context) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
@@ -293,5 +307,12 @@ func (s *subscription) Close(ctx context.Context) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	return s.unsub(ctx)
+	if s == nil || s.unsub == nil {
+		return nil
+	}
+
+	var err error
+	s.once.Do(func() { err = s.unsub(ctx) })
+
+	return err
 }

@@ -600,6 +600,14 @@ directive @goTag(
 	key: String!
 	value: String
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION`, BuiltIn: false},
+	{Name: "../../../app/mercury/mercury.graphqls", Input: `# extend type Query{
+#     keys(namespace: String!) [String!]!
+#     get(namespace: String! keys: [String!]) [String]!
+# }
+
+# extend type Mutation{
+#     set(namespace: String! key: String! value: String): Bool!
+# }`, BuiltIn: false},
 	{Name: "../../../app/msgbus/msgbus.graphqls", Input: `extend type Query {
     posts(streamID: String! paging: PageInput): Connection!
 }

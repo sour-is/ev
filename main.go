@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"net/url"
@@ -28,6 +29,7 @@ import (
 	resolvelinks "github.com/sour-is/ev/pkg/es/driver/resolve-links"
 	"github.com/sour-is/ev/pkg/es/driver/streamer"
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/gql/resolver"
 	"github.com/sour-is/ev/pkg/set"
 )
 
@@ -35,18 +37,21 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	go func() {
 		<-ctx.Done()
-		defer cancel()
+		defer cancel() // restore interrupt function
 	}()
 
+	// Initialize logger
 	ctx, stop := lg.Init(ctx, appName)
 	defer stop()
 
-	if err := run(ctx); err != nil && err != http.ErrServerClosed {
+	// Run application
+	if err := run(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
 }
 func run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
+	stop := &stopFns{}
 
 	cron := cron.New(cron.DefaultGranularity)
 
@@ -96,8 +101,9 @@ func run(ctx context.Context) error {
 
 		enable := set.New(strings.Fields(env("EV_ENABLE", "salty msgbus gql peers"))...)
 		var svcs []interface{ RegisterHTTP(*http.ServeMux) }
+		var res []resolver.IsResolver
 
-		svcs = append(svcs, es)
+		res = append(res, es)
 
 		if enable.Has("salty") {
 			span.AddEvent("Enable Salty")
@@ -113,6 +119,7 @@ func run(ctx context.Context) error {
 				return err
 			}
 			svcs = append(svcs, salty)
+			res = append(res, salty)
 		}
 
 		if enable.Has("msgbus") {
@@ -123,6 +130,7 @@ func run(ctx context.Context) error {
 				return err
 			}
 			svcs = append(svcs, msgbus)
+			res = append(res, msgbus)
 		}
 
 		if enable.Has("peers") {
@@ -137,11 +145,15 @@ func run(ctx context.Context) error {
 			cron.NewJob("0,15,30,45", peers.RefreshJob)
 			cron.Once(ctx, peers.CleanJob)
 			cron.NewJob("0 1", peers.CleanJob)
+			g.Go(func() error {
+				return peers.Run(ctx)
+			})
+			stop.add(peers.Stop)
 		}
 
 		if enable.Has("gql") {
 			span.AddEvent("Enable GraphQL")
-			gql, err := gql.New(ctx, svcs...)
+			gql, err := resolver.New(ctx, &gql.Resolver{}, res...)
 			if err != nil {
 				span.RecordError(err)
 				return err
@@ -164,18 +176,23 @@ func run(ctx context.Context) error {
 		Mup.Add(ctx, 1)
 
 		g.Go(s.ListenAndServe)
-
-		g.Go(func() error {
-			<-ctx.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			return s.Shutdown(ctx)
-		})
+		stop.add(s.Shutdown)
 
 		span.End()
 	}
 
-	g.Go(func() error { return cron.Run(ctx) })
+	g.Go(func() error {
+		<-ctx.Done()
+		// shutdown jobs
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		return stop.stop(ctx)
+	})
+	g.Go(func() error {
+		return cron.Run(ctx)
+	})
 
 	if err := g.Wait(); err != nil && err != http.ErrServerClosed {
 		return err
@@ -203,3 +220,21 @@ var appName, version = func() (string, string) {
 
 	return "sour.is-ev", "(devel)"
 }()
+
+type stopFns struct {
+	fns []func(context.Context) error
+}
+
+func (s *stopFns) add(fn func(context.Context) error) {
+	s.fns = append(s.fns, fn)
+}
+func (s *stopFns) stop(ctx context.Context) error {
+	g, _ := errgroup.WithContext(ctx)
+	for i := range s.fns {
+		fn := s.fns[i]
+		g.Go(func() error {
+			return fn(ctx)
+		})
+	}
+	return g.Wait()
+}

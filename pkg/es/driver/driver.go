@@ -28,7 +28,7 @@ type EventLogWithUpdate interface {
 }
 
 type Subscription interface {
-	Recv(context.Context) bool
+	Recv(context.Context) <-chan bool
 	Events(context.Context) (event.Events, error)
 	Close(context.Context) error
 }

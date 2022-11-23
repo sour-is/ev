@@ -48,7 +48,7 @@
   {{range $req := .Requests}}
       <div class="panel panel-primary">
           <div class="panel-heading">
-            <a href="/peers/req/{{ $req.RequestID }}">{{ $req.RequestIP }} on {{ $req.Created }}</a> 
+            <a href="/peers/req/{{ $req.RequestID }}">{{ $req.RequestIP }} on {{ $req.Created.Format "02 Jan 06 15:04 MST" }}</a> 
             <div style='float:right'><a href="/peers/req/{{ $req.RequestID }}" class='btn btn-success'>{{ countResponses $req }} / {{ $args.CountPeers }} </a></div>
           </div>
           <div class="panel-body"><b>Request ID:</b> {{ $req.RequestID }}</div>

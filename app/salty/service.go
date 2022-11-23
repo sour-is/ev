@@ -51,7 +51,7 @@ var saltyKey = contextKey{"salty"}
 type SaltyResolver interface {
 	CreateSaltyUser(ctx context.Context, nick string, pub string) (*SaltyUser, error)
 	SaltyUser(ctx context.Context, nick string) (*SaltyUser, error)
-	RegisterHTTP(mux *http.ServeMux)
+	IsResolver()
 }
 
 func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, error) {
@@ -110,6 +110,8 @@ func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, erro
 
 	return svc, errs
 }
+
+func (s *service) IsResolver() {}
 
 func (s *service) BaseURL() string {
 	if s == nil {

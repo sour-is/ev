@@ -35,7 +35,7 @@ type service struct {
 type MsgbusResolver interface {
 	Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error)
 	PostAdded(ctx context.Context, streamID string, after int64) (<-chan *PostEvent, error)
-	RegisterHTTP(mux *http.ServeMux)
+	IsResolver()
 }
 
 func New(ctx context.Context, es *es.EventStore) (*service, error) {
@@ -87,6 +87,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+func (s *service) IsResolver() {}
 func (s *service) RegisterHTTP(mux *http.ServeMux) {
 	mux.Handle("/inbox/", lg.Htrace(http.StripPrefix("/inbox/", s), "inbox"))
 }
@@ -197,7 +198,7 @@ func (r *service) PostAdded(ctx context.Context, streamID string, after int64) (
 			}()
 		}
 
-		for sub.Recv(ctx) {
+		for <-sub.Recv(ctx) {
 			events, err := sub.Events(ctx)
 			if err != nil {
 				span.RecordError(err)
@@ -425,7 +426,7 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	span.AddEvent("start ws")
-	for sub.Recv(ctx) {
+	for <-sub.Recv(ctx) {
 		events, err := sub.Events(ctx)
 		if err != nil {
 			break

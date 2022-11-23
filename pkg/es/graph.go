@@ -23,6 +23,7 @@ type contextKey struct {
 
 var esKey = contextKey{"event-store"}
 
+func (es *EventStore) IsResolver() {}
 func (es *EventStore) Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -51,10 +52,10 @@ func (es *EventStore) Events(ctx context.Context, streamID string, paging *gql.P
 
 	return &gql.Connection{
 		Paging: &gql.PageInfo{
-			Next:  lis.Last().EventMeta().Position < last,
-			Prev:  lis.First().EventMeta().Position > first,
-			Begin: lis.First().EventMeta().Position,
-			End:   lis.Last().EventMeta().Position,
+			Next:  lis.Last().EventMeta().ActualPosition < last,
+			Prev:  lis.First().EventMeta().ActualPosition > first,
+			Begin: lis.First().EventMeta().ActualPosition,
+			End:   lis.Last().EventMeta().ActualPosition,
 		},
 		Edges: edges,
 	}, nil
@@ -91,7 +92,7 @@ func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int6
 			}()
 		}
 
-		for sub.Recv(ctx) {
+		for <-sub.Recv(ctx) {
 			events, err := sub.Events(ctx)
 			if err != nil {
 				span.RecordError(err)
@@ -120,7 +121,6 @@ func (es *EventStore) TruncateStream(ctx context.Context, streamID string, index
 	err := es.Truncate(ctx, streamID, index)
 	return err == nil, err
 }
-func (*EventStore) RegisterHTTP(*http.ServeMux) {}
 func (e *EventStore) GetMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -8,7 +8,7 @@
     <title>DN42 PingFinder</title>
 
     <link href="/peers/assets/bootstrap.min.css" rel="stylesheet" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
-    <link href="/peers/assets/peerfinder.css" rel="stylesheet" integrity="sha384-ZsT4S9156eA60lsB4aOfffKowiaZ0NG7gIQfgIfGoxT6FxFocYH39kZgYaeZCvql"  crossorigin="anonymous">
+    <link href="/peers/assets/peerfinder.css" rel="stylesheet" crossorigin="anonymous">
 </head>
 
 <body>

@@ -15,7 +15,7 @@
           <div class="panel-heading">
             <b> {{.Country}} :: {{.Name}} :: {{.Nick}} </b>
             <div style='float:right'>
-              <a class='btn btn-success' href="#peer-{{.Nick}}">{{printf "%0.3f ms" .Latency}}</a>
+              <a class='btn btn-success' href="#peer-{{.Nick}}">{{ if eq .Latency 0.0 }}&mdash;{{ else }}{{printf "%0.3f ms" .Latency}}{{ end }}</a>
             </div>
           </div>
           <div class="panel-body">
@@ -38,7 +38,7 @@
                   <tr>
                     <th>{{.Name}}</th>
                     <td>{{.Country}}</td>
-                    <td>{{printf "%0.3f ms" .Latency}}</td>
+                    <td>{{ if eq .Latency 0.0 }}&mdash;{{ else }}{{printf "%0.3f ms" .Latency}}{{ end }}</td>
                     <td>{{ if eq .Jitter 0.0 }}&mdash;{{ else }}{{ printf "%0.3f ms" .Jitter }}{{ end }}</td>
                   </tr>
                 {{end}}

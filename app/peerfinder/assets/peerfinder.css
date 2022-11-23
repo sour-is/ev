@@ -30,29 +30,11 @@ body {
   border-top: 1px solid #e5e5e5;
 }
 
-/* Customize container */
-@media (min-width: 768px) {
-  .container {
-    max-width: 730px;
-  }
+.panel-heading a { 
+  color: white;
+  font-weight: bold;
 }
+
 .container-narrow > hr {
   margin: 30px 0;
 }
-
-
-/* Responsive: Portrait tablets and up */
-@media screen and (min-width: 768px) {
-  /* Remove the padding we set earlier */
-  .header,
-  .footer {
-    padding-right: 0;
-    padding-left: 0;
-  }
-  /* Space out the masthead */
-  .header {
-    margin-bottom: 30px;
-  }
-}
-
-.panel-primary a { color: white; font-weight:bold }
