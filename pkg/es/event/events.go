@@ -45,6 +45,9 @@ func NewEvents(lis ...Event) Events {
 	for i, e := range lis {
 		meta := e.EventMeta()
 		meta.Position = uint64(i)
+		if meta.ActualPosition == 0 {
+			meta.ActualPosition = uint64(i)
+		}
 		meta.EventID = getULID()
 		e.SetEventMeta(meta)
 	}
@@ -223,4 +226,29 @@ func (e *EventPtr) Values() any {
 		e.StreamID,
 		e.Pos,
 	}
+}
+
+type FeedTruncated struct {
+	eventMeta Meta
+}
+
+// EventMeta implements Event
+func (e *FeedTruncated) EventMeta() Meta {
+	if e == nil {
+		return Meta{}
+	}
+	return e.eventMeta
+}
+
+// SetEventMeta implements Event
+func (e *FeedTruncated) SetEventMeta(m Meta) {
+	if e == nil {
+		return
+	}
+	e.eventMeta = m
+}
+
+func (e *FeedTruncated) Values() any {
+	return struct {
+	}{}
 }

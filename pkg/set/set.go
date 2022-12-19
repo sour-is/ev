@@ -62,11 +62,13 @@ type BoundSet[T ordered] struct {
 }
 
 func NewBoundSet[T ordered](min, max T, items ...T) *BoundSet[T] {
-	return &BoundSet[T]{
+	b := &BoundSet[T]{
 		min: min,
 		max: max,
-		s:   New(items...),
+		s:   New[T](),
 	}
+	b.Add(items...)
+	return b
 }
 func (l *BoundSet[T]) Add(items ...T) *BoundSet[T] {
 	n := 0
@@ -110,5 +112,10 @@ func (l *BoundSet[T]) String() string {
 		n++
 	}
 	sort.Strings(lis)
-	return strings.Join(lis, ",")
+
+	var b strings.Builder
+	b.WriteString("set(")
+	b.WriteString(strings.Join(lis, ","))
+	b.WriteString(")")
+	return b.String()
 }

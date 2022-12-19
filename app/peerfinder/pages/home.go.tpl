@@ -32,7 +32,7 @@
         <div class="input-group input-group-sm">
             <input class="form-control" type="text" name="req_ip" placeholder="{{ .RemoteIP }}">
             <span class="input-group-addon">
-              <input type="checkbox" name="req_hidden" disabled value=1 aria-label="Hidden?">
+              <input type="checkbox" name="req_hidden" value=1 aria-label="Hidden?">
             </span>
         </div>
         <button class="btn btn-default" type="submit">Submit</button>
@@ -48,10 +48,13 @@
   {{range $req := .Requests}}
       <div class="panel panel-primary">
           <div class="panel-heading">
-            <a href="/peers/req/{{ $req.RequestID }}">{{ $req.RequestIP }} on {{ $req.Created.Format "02 Jan 06 15:04 MST" }}</a> 
-            <div style='float:right'><a href="/peers/req/{{ $req.RequestID }}" class='btn btn-success'>{{ countResponses $req }} / {{ $args.CountPeers }} </a></div>
+            <a href="/peers/req/{{ $req.RequestID }}">
+              {{ $req.RequestIP }} on {{ $req.Created.Format "02 Jan 06 15:04 MST" }}
+            </a> &mdash; <b>Request ID:</b> {{ $req.RequestID }}
+            <div style='float:right'>
+              <a href="/peers/req/{{ $req.RequestID }}" class='btn btn-success'>{{ countResponses $req }} / {{ $args.CountPeers }} </a>
+            </div>
           </div>
-          <div class="panel-body"><b>Request ID:</b> {{ $req.RequestID }}</div>
       </div>
   {{end}}
   {{end}}

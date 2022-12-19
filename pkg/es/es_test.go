@@ -9,10 +9,13 @@ import (
 	"time"
 
 	"github.com/matryer/is"
+	"go.uber.org/multierr"
 
+	"github.com/sour-is/ev/app/peerfinder"
 	"github.com/sour-is/ev/pkg/es"
 	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
 	"github.com/sour-is/ev/pkg/es/driver/projecter"
+	resolvelinks "github.com/sour-is/ev/pkg/es/driver/resolve-links"
 	"github.com/sour-is/ev/pkg/es/driver/streamer"
 	"github.com/sour-is/ev/pkg/es/event"
 )
@@ -29,9 +32,6 @@ type Thing struct {
 	event.AggregateRoot
 }
 
-//	func (a *Thing) StreamID() string {
-//		return fmt.Sprintf("thing-%s", a.Name)
-//	}
 func (a *Thing) ApplyEvent(lis ...event.Event) {
 	for _, e := range lis {
 		switch e := e.(type) {
@@ -77,9 +77,6 @@ func TestES(t *testing.T) {
 
 	err := event.Register(ctx, &ValueSet{})
 	is.NoErr(err)
-
-	es.Init(ctx)
-	memstore.Init(ctx)
 
 	{
 		store, err := es.Open(ctx, "mem")
@@ -138,9 +135,6 @@ func TestESOperations(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	es.Init(ctx)
-	memstore.Init(ctx)
-
 	store, err := es.Open(ctx, "mem:", streamer.New(ctx), projecter.New(ctx))
 	is.NoErr(err)
 
@@ -186,4 +180,45 @@ func TestUnwrap(t *testing.T) {
 
 	is.Equal(es.Unwrap(werr), err)
 	is.Equal(es.Unwrap("test"), "")
+}
+
+func TestUnwrapProjector(t *testing.T) {
+	is := is.New(t)
+
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+
+	es, err := es.Open(
+		ctx,
+		"mem:",
+		resolvelinks.New(),
+		streamer.New(ctx),
+		projecter.New(
+			ctx,
+			projecter.DefaultProjection,
+			peerfinder.Projector,
+		),
+	)
+	is.NoErr(err)
+
+	stream := es.EventStream()
+	is.True(stream != nil)
+
+}
+
+func TestMain(m *testing.M) {
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+
+	err := multierr.Combine(
+		es.Init(ctx),
+		event.Init(ctx),
+		memstore.Init(ctx),
+	)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	m.Run()
 }

@@ -7,7 +7,7 @@
 
 {{define "content"}}
   {{range .Requests}}
-    <h2>Results to {{.RequestIP}}</h2>
+    <h2>Results to {{.RequestIP}}{{if .Hidden}} 👁️{{end}}</h2>
 
     {{with (orderByPeer .)}}
       {{range .}}  

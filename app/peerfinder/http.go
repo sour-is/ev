@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
 	contentnegotiation "gitlab.com/jamietanna/content-negotiation-go"
 	"go.opentelemetry.io/otel/attribute"
 
@@ -58,6 +58,10 @@ func (s *service) RegisterHTTP(mux *http.ServeMux) {
 	mux.Handle("/peers/", lg.Htrace(s, "peers"))
 }
 
+func (s *service) Setup() error {
+	return nil
+}
+
 // ServeHTTP handle HTTP requests
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -66,6 +70,12 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	r = r.WithContext(ctx)
+
+	if !s.up.Load() {
+		w.WriteHeader(http.StatusFailedDependency)
+		fmt.Fprint(w, "Starting up...")
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -81,10 +91,13 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case strings.HasPrefix(r.URL.Path, "/peers/status"):
 			s.state.Modify(r.Context(), func(ctx context.Context, state *state) error {
 
-				for id, p := range state.requests {
-					fmt.Fprintln(w, "REQ: ", id, p.RequestIP, len(p.Responses))
-					for id, r := range p.Responses {
+				for id, rq := range state.requests {
+					fmt.Fprintln(w, "REQ: ", id, rq.RequestIP, len(rq.Responses))
+					for id, r := range rq.Responses {
 						fmt.Fprintln(w, "  RES: ", id, r.PeerID[24:], r.Latency, r.Jitter)
+					}
+					for p := range rq.peers {
+						fmt.Fprintln(w, "  PEER: ", p[24:])
 					}
 				}
 
@@ -114,19 +127,19 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-func (s *service) getPending(w http.ResponseWriter, r *http.Request, uuid string) {
+func (s *service) getPending(w http.ResponseWriter, r *http.Request, peerID string) {
 	ctx, span := lg.Span(r.Context())
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.String("uuid", uuid),
+		attribute.String("peerID", peerID),
 	)
 
 	var peer *Peer
 	err := s.state.Modify(ctx, func(ctx context.Context, state *state) error {
 		var ok bool
-		if peer, ok = state.peers[uuid]; !ok {
-			return fmt.Errorf("peer not found: %s", uuid)
+		if peer, ok = state.peers[peerID]; !ok {
+			return fmt.Errorf("peer not found: %s", peerID)
 		}
 
 		return nil
@@ -153,16 +166,30 @@ func (s *service) getPending(w http.ResponseWriter, r *http.Request, uuid string
 		return
 	}
 
-	responses, err := s.es.Read(ctx, aggPeer(uuid), -1, -30)
+	peerResults := &PeerResults{}
+	peerResults.SetStreamID(aggPeer(peerID))
+	err = s.es.Load(ctx, peerResults)
 	if err != nil {
-		span.RecordError(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		span.RecordError(fmt.Errorf("peer not found: %w", err))
+		w.WriteHeader(http.StatusNotFound)
 	}
 
-	span.AddEvent(fmt.Sprintf("req = %d, res = %d", len(requests), len(responses)))
+	var req *Request
+	for _, e := range requests {
+		r := &Request{}
+		r.ApplyEvent(e)
 
-	req := filter(peer, requests, responses)
+		if !peerResults.Has(r.RequestID) {
+			if !peer.CanSupport(r.RequestIP) {
+				continue
+			}
+			req = r
+		}
+	}
+	if req == nil {
+		span.RecordError(fmt.Errorf("request not found"))
+		w.WriteHeader(http.StatusNoContent)
+	}
 
 	negotiator := contentnegotiation.NewNegotiator("application/json", "text/environment", "text/plain", "text/html")
 	negotiated, _, err := negotiator.Negotiate(r.Header.Get("Accept"))
@@ -190,9 +217,9 @@ func (s *service) getPending(w http.ResponseWriter, r *http.Request, uuid string
 				Created       string `json:"req_created"`
 			}{
 				info.ScriptVersion,
-				req.RequestID(),
+				req.RequestID,
 				req.RequestIP,
-				strconv.Itoa(req.Family()),
+				strconv.Itoa(req.Family),
 				req.CreatedString(),
 			}
 		}
@@ -204,34 +231,53 @@ func (s *service) getResults(w http.ResponseWriter, r *http.Request) {
 	ctx, span := lg.Span(r.Context())
 	defer span.End()
 
-	events, err := s.es.Read(ctx, queueRequests, -1, -30)
-	if err != nil {
-		span.RecordError(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	// events, err := s.es.Read(ctx, queueRequests, -1, -30)
+	// if err != nil {
+	// 	span.RecordError(err)
+	// 	w.WriteHeader(http.StatusInternalServerError)
+	// 	return
+	// }
 
-	requests := make([]*Request, len(events))
-	for i, req := range events {
-		if req, ok := req.(*RequestSubmitted); ok {
-			requests[i], err = s.loadResult(ctx, req.RequestID())
-			if err != nil {
-				span.RecordError(err)
-				w.WriteHeader(http.StatusInternalServerError)
-				return
+	// requests := make([]*Request, len(events))
+	// for i, req := range events {
+	// 	if req, ok := req.(*RequestSubmitted); ok {
+	// 		requests[i], err = s.loadResult(ctx, req.RequestID())
+	// 		if err != nil {
+	// 			span.RecordError(err)
+	// 			w.WriteHeader(http.StatusInternalServerError)
+	// 			return
+	// 		}
+	// 	}
+	// }
+
+	var requests ListRequest
+	s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+		requests = make([]*Request, 0, len(state.requests))
+
+		for _, req := range state.requests {
+			if req.RequestID == "" {
+				continue
 			}
+			if req.Hidden {
+				continue
+			}
+
+			requests = append(requests, req)
 		}
-	}
+
+		return nil
+	})
+	sort.Sort(sort.Reverse(requests))
 
 	args := requestArgs(r)
-	args.Requests = requests
+	args.Requests = requests[:maxResults]
 
 	s.state.Modify(ctx, func(ctx context.Context, state *state) error {
 		args.CountPeers = len(state.peers)
 		return nil
 	})
 
-	t := templates["home.tpl"]
+	t := templates["home.go.tpl"]
 	t.Execute(w, args)
 }
 func (s *service) getResultsForRequest(w http.ResponseWriter, r *http.Request, uuid string) {
@@ -242,7 +288,20 @@ func (s *service) getResultsForRequest(w http.ResponseWriter, r *http.Request, u
 		attribute.String("uuid", uuid),
 	)
 
-	request, err := s.loadResult(ctx, uuid)
+	var request *Request
+	err := s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+		request = state.requests[uuid]
+
+		return nil
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	request, err = s.loadResult(ctx, request)
+
+	// request, err := s.loadResult(ctx, uuid)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -265,7 +324,7 @@ func (s *service) getResultsForRequest(w http.ResponseWriter, r *http.Request, u
 		args := requestArgs(r)
 		args.Requests = append(args.Requests, request)
 		span.AddEvent(fmt.Sprint(args))
-		err := renderTo(w, "req.tpl", args)
+		err := renderTo(w, "req.go.tpl", args)
 		span.RecordError(err)
 
 		return
@@ -295,7 +354,7 @@ func (s *service) postRequest(w http.ResponseWriter, r *http.Request) {
 	req := &RequestSubmitted{
 		RequestIP: ip.String(),
 	}
-	if hidden, err := strconv.ParseBool(r.Form.Get("req_hidden")); err != nil {
+	if hidden, err := strconv.ParseBool(r.Form.Get("req_hidden")); err == nil {
 		req.Hidden = hidden
 	}
 
@@ -307,15 +366,15 @@ func (s *service) postRequest(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, "/peers/req/"+req.RequestID(), http.StatusSeeOther)
 }
-func (s *service) postResult(w http.ResponseWriter, r *http.Request, id string) {
+func (s *service) postResult(w http.ResponseWriter, r *http.Request, reqID string) {
 	ctx, span := lg.Span(r.Context())
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.String("id", id),
+		attribute.String("id", reqID),
 	)
 
-	if _, err := ulid.ParseStrict(id); err != nil {
+	if _, err := ulid.ParseStrict(reqID); err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -336,10 +395,11 @@ func (s *service) postResult(w http.ResponseWriter, r *http.Request, id string) 
 	)
 
 	peerID := r.Form.Get("peer_id")
+
 	err := s.state.Modify(ctx, func(ctx context.Context, state *state) error {
 		var ok bool
 		if _, ok = state.peers[peerID]; !ok {
-			// fmt.Printf("peer not found: %s\n", peerID)
+			log.Printf("peer not found: %s\n", peerID)
 			return fmt.Errorf("peer not found: %s", peerID)
 		}
 
@@ -351,6 +411,20 @@ func (s *service) postResult(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
+	peerResults := &PeerResults{}
+	peerResults.SetStreamID(aggPeer(peerID))
+	err = s.es.Load(ctx, peerResults)
+	if err != nil {
+		span.RecordError(fmt.Errorf("peer not found: %w", err))
+		w.WriteHeader(http.StatusNotFound)
+	}
+
+	if peerResults.Has(reqID) {
+		span.RecordError(fmt.Errorf("request previously recorded: req=%v peer=%v", reqID, peerID))
+		w.WriteHeader(http.StatusAlreadyReported)
+		return
+	}
+
 	var unreach bool
 	latency, err := strconv.ParseFloat(r.Form.Get("res_latency"), 64)
 	if err != nil {
@@ -358,7 +432,7 @@ func (s *service) postResult(w http.ResponseWriter, r *http.Request, id string) 
 	}
 
 	req := &ResultSubmitted{
-		RequestID:   id,
+		RequestID:   reqID,
 		PeerID:      r.Form.Get("peer_id"),
 		PeerVersion: r.Form.Get("peer_version"),
 		Latency:     latency,
@@ -385,21 +459,7 @@ func (s *service) postResult(w http.ResponseWriter, r *http.Request, id string) 
 		attribute.Stringer("result", req),
 	)
 
-	s.state.Modify(ctx, func(ctx context.Context, state *state) error {
-
-		return nil
-	})
-
-	idx, err := s.es.LastIndex(ctx, aggRequest(id))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
+	log.Printf("record result: %v", req)
 	s.es.Append(ctx, queueResults, event.NewEvents(req))
 }
 
@@ -452,7 +512,7 @@ func loadTemplates() error {
 		}
 		pt := template.New(tmpl.Name())
 		pt.Funcs(funcMap)
-		pt, err = pt.ParseFS(files, "pages/"+tmpl.Name(), "layouts/*.tpl")
+		pt, err = pt.ParseFS(files, "pages/"+tmpl.Name(), "layouts/*.go.tpl")
 		if err != nil {
 			log.Println(err)
 
@@ -468,27 +528,44 @@ var funcMap = map[string]any{
 	"countResponses": fnCountResponses,
 }
 
-func fnOrderByPeer(rq *Request) any {
-	type peerResult struct {
-		Name    string
-		Country string
-		Latency float64
-		Jitter  float64
-	}
-	type peer struct {
-		Name     string
-		Note     string
-		Nick     string
-		Country  string
-		Latency  float64
-		Jitter   float64
-		VPNTypes []string
+type peerResult struct {
+	Name    string
+	Country string
+	Latency float64
+	Jitter  float64
+}
+type peer struct {
+	Name     string
+	Note     string
+	Nick     string
+	Country  string
+	Latency  float64
+	Jitter   float64
+	VPNTypes []string
 
-		Results []peerResult
+	Results []peerResult
+}
+type listPeer []peer
+
+func (lis listPeer) Len() int {
+	return len(lis)
+}
+func (lis listPeer) Less(i, j int) bool {
+	if lis[i].Latency == 0.0 {
+		return false
 	}
+	return lis[i].Latency < lis[j].Latency
+}
+func (lis listPeer) Swap(i, j int) {
+	lis[i], lis[j] = lis[j], lis[i]
+}
+
+func fnOrderByPeer(rq *Request) any {
 
 	peers := make(map[string]peer)
+
 	sort.Sort(ListResponse(rq.Responses))
+
 	for _, rs := range rq.Responses {
 		p, ok := peers[rs.Peer.Owner]
 
@@ -512,7 +589,14 @@ func fnOrderByPeer(rq *Request) any {
 		peers[rs.Peer.Owner] = p
 	}
 
-	return peers
+	peerList := make(listPeer, 0, len(peers))
+	for _, v := range peers {
+		peerList = append(peerList, v)
+	}
+
+	sort.Sort(peerList)
+
+	return peerList
 }
 func fnCountResponses(rq *Request) int {
 	count := 0
@@ -523,37 +607,38 @@ func fnCountResponses(rq *Request) int {
 	}
 	return count
 }
-func filter(peer *Peer, requests, responses event.Events) *RequestSubmitted {
-	have := make(map[string]struct{}, len(responses))
-	for _, res := range toList[ResultSubmitted](responses...) {
-		have[res.RequestID] = struct{}{}
-	}
-	for _, req := range reverse(toList[RequestSubmitted](requests...)...) {
-		if _, ok := have[req.RequestID()]; !ok {
-			if !peer.CanSupport(req.RequestIP) {
-				continue
-			}
 
-			return req
-		}
-	}
-	return nil
-}
-func toList[E any, T es.PE[E]](lis ...event.Event) []T {
-	newLis := make([]T, 0, len(lis))
-	for i := range lis {
-		if e, ok := lis[i].(T); ok {
-			newLis = append(newLis, e)
-		}
-	}
-	return newLis
-}
-func reverse[T any](s ...T) []T {
-	first, last := 0, len(s)-1
-	for first < last {
-		s[first], s[last] = s[last], s[first]
-		first++
-		last--
-	}
-	return s
-}
+// func filter(peer *Peer, requests, responses event.Events) *RequestSubmitted {
+// 	have := make(map[string]struct{}, len(responses))
+// 	for _, res := range toList[ResultSubmitted](responses...) {
+// 		have[res.RequestID] = struct{}{}
+// 	}
+// 	for _, req := range reverse(toList[RequestSubmitted](requests...)...) {
+// 		if _, ok := have[req.RequestID()]; !ok {
+// 			if !peer.CanSupport(req.RequestIP) {
+// 				continue
+// 			}
+
+// 			return req
+// 		}
+// 	}
+// 	return nil
+// }
+// func toList[E any, T es.PE[E]](lis ...event.Event) []T {
+// 	newLis := make([]T, 0, len(lis))
+// 	for i := range lis {
+// 		if e, ok := lis[i].(T); ok {
+// 			newLis = append(newLis, e)
+// 		}
+// 	}
+// 	return newLis
+// }
+// func reverse[T any](s ...T) []T {
+// 	first, last := 0, len(s)-1
+// 	for first < last {
+// 		s[first], s[last] = s[last], s[first]
+// 		first++
+// 		last--
+// 	}
+// 	return s
+// }

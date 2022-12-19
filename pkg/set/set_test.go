@@ -23,3 +23,17 @@ func TestStringSet(t *testing.T) {
 	var n set.Set[string]
 	is.Equal(n.String(), "set(<nil>)")
 }
+
+func TestBoundSet(t *testing.T) {
+	is := is.New(t)
+
+	s := set.NewBoundSet(1, 100, 1, 2, 3, 100, 1001)
+
+	is.True(s.Has(1))
+	is.True(s.Has(2))
+	is.True(s.Has(3))
+	is.True(!s.Has(1001))
+
+	is.Equal(set.NewBoundSet(1, 100, 1).String(), "set(1)")
+
+}

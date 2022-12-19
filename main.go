@@ -83,7 +83,6 @@ func run(ctx context.Context) error {
 			projecter.New(
 				ctx,
 				projecter.DefaultProjection,
-				peerfinder.Projector,
 			),
 		)
 		if err != nil {
@@ -135,6 +134,8 @@ func run(ctx context.Context) error {
 
 		if enable.Has("peers") {
 			span.AddEvent("Enable Peers")
+			es.Option(projecter.New(ctx, peerfinder.Projector))
+
 			peers, err := peerfinder.New(ctx, es, env("PEER_STATUS", ""))
 			if err != nil {
 				span.RecordError(err)
@@ -220,6 +221,10 @@ var appName, version = func() (string, string) {
 
 	return "sour.is-ev", "(devel)"
 }()
+
+type application interface {
+	Setup(context.Context) error
+}
 
 type stopFns struct {
 	fns []func(context.Context) error

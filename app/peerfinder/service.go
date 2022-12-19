@@ -3,6 +3,7 @@ package peerfinder
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/sour-is/ev/internal/lg"
@@ -27,6 +28,7 @@ type service struct {
 	statusURL string
 
 	state *locker.Locked[state]
+	up    atomic.Bool
 	stop  func()
 }
 
@@ -56,17 +58,15 @@ func New(ctx context.Context, es *es.EventStore, statusURL string) (*service, er
 
 	return svc, nil
 }
-func (s *service) loadResult(ctx context.Context, uuid string) (*Request, error) {
-	request := &Request{}
-	request.SetStreamID(aggRequest(uuid))
-	err := s.es.Load(ctx, request)
-	if err != nil {
-		return nil, err
+func (s *service) loadResult(ctx context.Context, request *Request) (*Request, error) {
+	if request == nil {
+		return request, nil
 	}
 
 	return request, s.state.Modify(ctx, func(ctx context.Context, t *state) error {
+
 		for i := range request.Responses {
-			res := &request.Responses[i]
+			res := request.Responses[i]
 			if peer, ok := t.peers[res.PeerID]; ok {
 				res.Peer = peer
 				res.Peer.ID = ""
@@ -146,6 +146,8 @@ func (s *state) ApplyEvents(events event.Events) error {
 				s.requests[e.RequestID] = &Request{}
 			}
 			s.requests[e.RequestID].ApplyEvent(e)
+		case *RequestTruncated:
+			delete(s.requests, e.RequestID)
 		}
 	}
 

@@ -5,6 +5,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/keys-pub/keys/json"
+	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/set"
 )
 
 type Time time.Time
@@ -49,7 +53,9 @@ func (t *ipFamily) UnmarshalJSON(b []byte) error {
 type peerType []string
 
 func (t *peerType) UnmarshalJSON(b []byte) error {
-	*t = strings.Split(strings.Trim(string(b), `"`), ",")
+	var bs string
+	json.Unmarshal(b, &bs)
+	*t = strings.Split(bs, ",")
 	return nil
 }
 
@@ -70,7 +76,7 @@ func (p *Peer) CanSupport(ip string) bool {
 	if addr == nil {
 		return false
 	}
-	if !addr.IsGlobalUnicast() {
+	if !(addr.IsGlobalUnicast() || addr.IsLoopback() || addr.IsPrivate()) {
 		return false
 	}
 
@@ -85,3 +91,21 @@ func (p *Peer) CanSupport(ip string) bool {
 
 	return true
 }
+
+type PeerResults struct {
+	set.Set[string]
+	event.AggregateRoot
+}
+
+func (p *PeerResults) ApplyEvent(lis ...event.Event) {
+	for _, e := range lis {
+		switch e := e.(type) {
+		case *ResultSubmitted:
+			if p.Set == nil {
+				p.Set = set.New[string]()
+			}
+			p.Set.Add(e.RequestID)
+		}
+	}
+}
+

@@ -100,13 +100,17 @@ func Open(ctx context.Context, dsn string, options ...Option) (*EventStore, erro
 	conn, err := d.Open(ctx, dsn)
 
 	es := &EventStore{Driver: conn}
-	for _, o := range options {
-		o.Apply(es)
-	}
+	es.Option(options...)
 
 	Mes_open.Add(ctx, 1)
 
 	return es, err
+}
+
+func (es *EventStore) Option(options ...Option) {
+	for _, o := range options {
+		o.Apply(es)
+	}
 }
 
 type Option interface {
@@ -282,10 +286,14 @@ func (es *EventStore) Truncate(ctx context.Context, streamID string, index int64
 
 	for up != nil {
 		if up, ok := up.(driver.EventLogWithTruncate); ok {
-			return up.Truncate(ctx, index)
+			err = up.Truncate(ctx, index)
+			if err != nil {
+				return err
+			}
 		}
 		up = Unwrap(up)
 	}
+
 	return ErrNoDriver
 }
 

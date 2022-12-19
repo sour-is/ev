@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es"
-	"github.com/sour-is/ev/pkg/math"
+	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/set"
 )
 
@@ -40,8 +41,6 @@ func (s *service) RefreshJob(ctx context.Context, _ time.Time) error {
 		return err
 	}
 
-	span.AddEvent(fmt.Sprintf("processed %d peers", len(peers)))
-
 	err = s.state.Modify(ctx, func(ctx context.Context, t *state) error {
 		for _, peer := range peers {
 			t.peers[peer.ID] = peer
@@ -50,8 +49,22 @@ func (s *service) RefreshJob(ctx context.Context, _ time.Time) error {
 		return nil
 	})
 	span.RecordError(err)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("processed %d peers", len(peers))
+	span.AddEvent(fmt.Sprintf("processed %d peers", len(peers)))
+
+	s.up.Store(true)
+
+	err = s.cleanPeerJobs(ctx)
+
+	span.RecordError(err)
 	return err
 }
+
+const maxResults = 30
 
 // CleanJob truncates streams old request data
 func (s *service) CleanJob(ctx context.Context, now time.Time) error {
@@ -60,13 +73,13 @@ func (s *service) CleanJob(ctx context.Context, now time.Time) error {
 
 	span.AddEvent("clear peerfinder requests")
 
-	endRequestID, err := s.cleanRequests(ctx, now)
+	err := s.cleanRequests(ctx, now)
 	if err != nil {
 		return err
 	}
-	if err = s.cleanResults(ctx, endRequestID); err != nil {
-		return err
-	}
+	// if err = s.cleanResults(ctx, endRequestID); err != nil {
+	// 	return err
+	// }
 
 	return s.cleanPeerJobs(ctx)
 }
@@ -96,12 +109,12 @@ func (s *service) cleanPeerJobs(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		newFirst := math.Max(int64(last-30), int64(first))
-		if last == 0 || newFirst == int64(first) {
-			// fmt.Println("SKIP", streamID, first, newFirst, last)
-			span.AddEvent(fmt.Sprint("SKIP", streamID, first, newFirst, last))
+		if last-first < maxResults {
+			fmt.Println("SKIP", streamID, first, last)
 			continue
 		}
+
+		newFirst := int64(last - 30)
 		// fmt.Println("TRUNC", streamID, first, newFirst, last)
 		span.AddEvent(fmt.Sprint("TRUNC", streamID, first, newFirst, last))
 		err = s.es.Truncate(ctx, streamID, int64(newFirst))
@@ -112,41 +125,47 @@ func (s *service) cleanPeerJobs(ctx context.Context) error {
 
 	return nil
 }
-func (s *service) cleanRequests(ctx context.Context, now time.Time) (string, error) {
+func (s *service) cleanRequests(ctx context.Context, now time.Time) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	var streamIDs []string
-	var endPosition uint64
-	var endRequestID string
+	var startPosition, endPosition int64
 
+	first, err := s.es.FirstIndex(ctx, queueRequests)
+	if err != nil {
+		return err
+	}
 	last, err := s.es.LastIndex(ctx, queueRequests)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-end:
+	if last-first < maxResults {
+		// fmt.Println("SKIP", queueRequests, first, last)
+		return nil
+	}
+
+	startPosition = int64(first - 1)
+	endPosition = int64(last - maxResults)
+
 	for {
-		events, err := s.es.Read(ctx, queueRequests, int64(endPosition), 1000) // read 1000 from the top each loop.
+		events, err := s.es.Read(ctx, queueRequests, startPosition, 1000) // read 1000 from the top each loop.
 		if err != nil && !errors.Is(err, es.ErrNotFound) {
 			span.RecordError(err)
-			return "", err
+			return err
 		}
 
 		if len(events) == 0 {
 			break
 		}
 
-		endPosition = events.Last().EventMeta().ActualPosition
+		startPosition = int64(events.Last().EventMeta().ActualPosition)
 		for _, event := range events {
 			switch e := event.(type) {
 			case *RequestSubmitted:
-				if e.eventMeta.ActualPosition < last-30 {
-					streamIDs = append(streamIDs, aggRequest(e.RequestID()))
-				} else {
-					endRequestID = e.RequestID()
-					endPosition = e.eventMeta.ActualPosition
-					break end
+				if e.eventMeta.ActualPosition < last-maxResults {
+					streamIDs = append(streamIDs, e.RequestID())
 				}
 			}
 		}
@@ -157,59 +176,39 @@ end:
 	span.AddEvent(fmt.Sprint("TRUNC", queueRequests, int64(endPosition), last))
 	err = s.es.Truncate(ctx, queueRequests, int64(endPosition))
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// truncate all the request streams
 	for _, streamID := range streamIDs {
-		last, err := s.es.LastIndex(ctx, streamID)
-		if err != nil {
-			return "", err
-		}
-		// fmt.Println("TRUNC", streamID, last)
-		span.AddEvent(fmt.Sprint("TRUNC", streamID, last))
-		err = s.es.Truncate(ctx, streamID, int64(last))
-		if err != nil {
-			return "", err
-		}
-	}
+		s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+			return state.ApplyEvents(event.NewEvents(&RequestTruncated{
+				RequestID: streamID,
+			}))
+		})
 
-	return endRequestID, nil
-}
-func (s *service) cleanResults(ctx context.Context, endRequestID string) error {
-	ctx, span := lg.Span(ctx)
-	defer span.End()
-
-	var endPosition uint64
-
-	done := false
-	for !done {
-		events, err := s.es.Read(ctx, queueResults, int64(endPosition), 1000) // read 30 from the top each loop.
+		err := s.cleanResult(ctx, streamID)
 		if err != nil {
 			return err
 		}
+	}
 
-		if len(events) == 0 {
-			done = true
-			continue
-		}
+	return nil
+}
+func (s *service) cleanResult(ctx context.Context, requestID string) error {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
 
-		endPosition = events.Last().EventMeta().ActualPosition
+	streamID := aggRequest(requestID)
 
-		for _, event := range events {
-			switch e := event.(type) {
-			case *ResultSubmitted:
-				if e.RequestID == endRequestID {
-					done = true
-					endPosition = e.eventMeta.ActualPosition
-				}
-			}
-		}
+	last, err := s.es.LastIndex(ctx, streamID)
+	if err != nil {
+		return err
 	}
 	// truncate all reqs to found end position
-	// fmt.Println("TRUNC", queueResults, int64(endPosition), last)
-	span.AddEvent(fmt.Sprint("TRUNC", queueResults, int64(endPosition)))
-	err := s.es.Truncate(ctx, queueResults, int64(endPosition))
+	// fmt.Println("TRUNC", streamID, last)
+	span.AddEvent(fmt.Sprint("TRUNC", streamID, last))
+	err = s.es.Truncate(ctx, streamID, int64(last))
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/oklog/ulid"
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/set"
 )
 
 type Request struct {
@@ -19,8 +20,11 @@ type Request struct {
 	RequestIP string    `json:"req_ip"`
 	Hidden    bool      `json:"hide,omitempty"`
 	Created   time.Time `json:"req_created"`
+	Family    int       `json:"family"`
 
-	Responses []Response `json:"responses"`
+	Responses []*Response `json:"responses"`
+	peers     set.Set[string]
+	initial   *RequestSubmitted
 }
 
 var _ event.Aggregate = (*Request)(nil)
@@ -33,8 +37,19 @@ func (a *Request) ApplyEvent(lis ...event.Event) {
 			a.RequestIP = e.RequestIP
 			a.Hidden = e.Hidden
 			a.Created = ulid.Time(e.EventMeta().EventID.Time())
+			a.Family = e.Family()
+
+			a.initial = e
 		case *ResultSubmitted:
-			a.Responses = append(a.Responses, Response{
+			if a.peers == nil {
+				a.peers = set.New[string]()
+			}
+			if a.peers.Has(e.PeerID) {
+				continue
+			}
+
+			a.peers.Add(e.PeerID)
+			a.Responses = append(a.Responses, &Response{
 				PeerID:        e.PeerID,
 				ScriptVersion: e.PeerVersion,
 				Latency:       e.Latency,
@@ -48,6 +63,25 @@ func (a *Request) ApplyEvent(lis ...event.Event) {
 			})
 		}
 	}
+}
+
+func (a *Request) MarshalEnviron() ([]byte, error) {
+	return a.initial.MarshalEnviron()
+}
+func (a *Request) CreatedString() string {
+	return a.Created.Format("2006-01-02 15:04:05")
+}
+
+type ListRequest []*Request
+
+func (lis ListRequest) Len() int {
+	return len(lis)
+}
+func (lis ListRequest) Less(i, j int) bool {
+	return lis[i].Created.Before(lis[j].Created)
+}
+func (lis ListRequest) Swap(i, j int) {
+	lis[i], lis[j] = lis[j], lis[i]
 }
 
 type Response struct {
@@ -66,12 +100,15 @@ type Response struct {
 	Created time.Time `json:"res_created"`
 }
 
-type ListResponse []Response
+type ListResponse []*Response
 
 func (lis ListResponse) Len() int {
 	return len(lis)
 }
 func (lis ListResponse) Less(i, j int) bool {
+	if lis[i].Latency == 0.0 {
+		return false
+	}
 	return lis[i].Latency < lis[j].Latency
 }
 func (lis ListResponse) Swap(i, j int) {
@@ -111,6 +148,9 @@ func (r *RequestSubmitted) Family() int {
 	default:
 		return 2
 	}
+}
+func (r *RequestSubmitted) String() string {
+	return fmt.Sprint(r.eventMeta.EventID, r.RequestIP, r.Hidden, r.CreatedString())
 }
 
 var _ event.Event = (*RequestSubmitted)(nil)
@@ -199,4 +239,33 @@ func (e *ResultSubmitted) UnmarshalBinary(b []byte) error {
 }
 func (e *ResultSubmitted) String() string {
 	return fmt.Sprintf("id: %s\npeer: %s\nversion: %s\nlatency: %0.4f", e.RequestID, e.PeerID, e.PeerVersion, e.Latency)
+}
+
+type RequestTruncated struct {
+	RequestID string
+
+	eventMeta event.Meta
+}
+
+var _ event.Event = (*RequestTruncated)(nil)
+
+func (e *RequestTruncated) EventMeta() event.Meta {
+	if e == nil {
+		return event.Meta{}
+	}
+	return e.eventMeta
+}
+func (e *RequestTruncated) SetEventMeta(m event.Meta) {
+	if e != nil {
+		e.eventMeta = m
+	}
+}
+func (e *RequestTruncated) MarshalBinary() (text []byte, err error) {
+	return json.Marshal(e)
+}
+func (e *RequestTruncated) UnmarshalBinary(b []byte) error {
+	return json.Unmarshal(b, e)
+}
+func (e *RequestTruncated) String() string {
+	return fmt.Sprintf("request truncated id: %s\n", e.RequestID)
 }

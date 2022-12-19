@@ -16,10 +16,22 @@ type projector struct {
 	fns []func(event.Event) []event.Event
 }
 
-func New(ctx context.Context, fns ...func(event.Event) []event.Event) *projector {
+func New(_ context.Context, fns ...func(event.Event) []event.Event) *projector {
 	return &projector{fns: fns}
 }
 func (p *projector) Apply(e *es.EventStore) {
+
+	up := e.Driver
+	for up != nil {
+		if op, ok := up.(*projector); ok {
+			op.AddProjections(p.fns...)
+			p.up = op.up
+			return
+		}
+
+		up = es.Unwrap(up)
+	}
+
 	p.up = e.Driver
 	e.Driver = p
 }
@@ -38,6 +50,9 @@ func (s *projector) EventLog(ctx context.Context, streamID string) (driver.Event
 
 	l, err := s.up.EventLog(ctx, streamID)
 	return &wrapper{l, s}, err
+}
+func (s *projector) AddProjections(fns ...func(event.Event) []event.Event) {
+	s.fns = append(s.fns, fns...)
 }
 
 type wrapper struct {
