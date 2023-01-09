@@ -12,7 +12,7 @@ endif
 	air ./cmd/ev
 
 run:
-	go run  ./cmd/ev
+	go build ./cmd/ev && ./ev
 
 test:
 	go test -cover -race ./...

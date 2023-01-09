@@ -21,6 +21,11 @@ var _ = apps.Register(20, func(ctx context.Context, svc *service.Harness) error 
 	mux := mux.New()
 	s.Handler = cors.AllowAll().Handler(mux)
 
+	// s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// 	log.Println(r.URL.Path)
+	// 	mux.ServeHTTP(w, r)
+	// })
+
 	s.Addr = env.Default("EV_HTTP", ":8080")
 	if strings.HasPrefix(s.Addr, ":") {
 		s.Addr = "[::]" + s.Addr

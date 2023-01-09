@@ -5,4 +5,5 @@ data/
 local.mk
 logzio.yml
 tmp/
+/build
 /ev

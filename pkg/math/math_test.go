@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev/pkg/es"
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/pkg/math"
 )
 
@@ -74,8 +74,8 @@ func TestPagerBox(t *testing.T) {
 		{1, 10, -2, -10, 9, -9},
 		{1, 10, 0, -10, 0, 0},
 		{1, 10, 10, 10, 0, 0},
-		{1, 10, 0, es.AllEvents, 1, 10},
-		{1, 10, -1, -es.AllEvents, 10, -10},
+		{1, 10, 0, ev.AllEvents, 1, 10},
+		{1, 10, -1, -ev.AllEvents, 10, -10},
 
 		{5, 10, 0, 1, 5, 1},
 	}

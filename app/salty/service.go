@@ -136,7 +136,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	defer s.m_req_time.Record(ctx, time.Since(start).Milliseconds())
 
-	addr := "saltyuser-" + strings.TrimPrefix(r.URL.Path, "/.well-known/salty/")
+	addr := "saltyuser-" + strings.TrimPrefix(r.URL.Path, "/salty/")
 	addr = strings.TrimSuffix(addr, ".json")
 
 	span.AddEvent(fmt.Sprint("find ", addr))

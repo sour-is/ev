@@ -47,8 +47,7 @@ var _ = apps.Register(10, func(ctx context.Context, svc *service.Harness) error 
 		span.RecordError(err)
 		return err
 	}
-	svc.Add(eventstore)
-	svc.Add(&es.EventStore{EventStore: eventstore})
+	svc.Add(eventstore, &es.EventStore{EventStore: eventstore})
 
 	return nil
 })
