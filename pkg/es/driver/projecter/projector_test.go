@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev/pkg/es"
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/driver/projecter"
 	"github.com/sour-is/ev/pkg/es/event"
@@ -112,10 +112,10 @@ func TestProjecter(t *testing.T) {
 		return mockEL, nil
 	}
 
-	es.Init(ctx)
-	es.Register(ctx, "mock", mock)
+	ev.Init(ctx)
+	ev.Register(ctx, "mock", mock)
 
-	es, err := es.Open(
+	es, err := ev.Open(
 		ctx,
 		"mock:",
 		projecter.New(ctx, projecter.DefaultProjection),

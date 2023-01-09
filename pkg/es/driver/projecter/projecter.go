@@ -5,8 +5,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 )
@@ -19,7 +19,7 @@ type projector struct {
 func New(_ context.Context, fns ...func(event.Event) []event.Event) *projector {
 	return &projector{fns: fns}
 }
-func (p *projector) Apply(e *es.EventStore) {
+func (p *projector) Apply(e *ev.EventStore) {
 
 	up := e.Driver
 	for up != nil {
@@ -29,7 +29,7 @@ func (p *projector) Apply(e *es.EventStore) {
 			return
 		}
 
-		up = es.Unwrap(up)
+		up = ev.Unwrap(up)
 	}
 
 	p.up = e.Driver
@@ -112,7 +112,7 @@ func (w *wrapper) Append(ctx context.Context, events event.Events, version uint6
 					span.RecordError(err)
 					continue
 				}
-				_, err = l.Append(ctx, event.NewEvents(e), es.AppendOnly)
+				_, err = l.Append(ctx, event.NewEvents(e), ev.AppendOnly)
 				span.RecordError(err)
 			}
 		}()

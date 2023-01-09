@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
@@ -23,13 +24,17 @@ type contextKey struct {
 
 var esKey = contextKey{"event-store"}
 
+type EventStore struct {
+	*ev.EventStore
+}
+
 func (es *EventStore) IsResolver() {}
 func (es *EventStore) Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
 	lis, err := es.Read(ctx, streamID, paging.GetIdx(0), paging.GetCount(30))
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	if err != nil && !errors.Is(err, ev.ErrNotFound) {
 		span.RecordError(err)
 		return nil, err
 	}

@@ -9,8 +9,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
@@ -32,9 +32,9 @@ func New(ctx context.Context) *streamer {
 	return &streamer{state: locker.New(&state{subscribers: map[string][]*subscription{}})}
 }
 
-var _ es.Option = (*streamer)(nil)
+var _ ev.Option = (*streamer)(nil)
 
-func (s *streamer) Apply(e *es.EventStore) {
+func (s *streamer) Apply(e *ev.EventStore) {
 	s.up = e.Driver
 	e.Driver = s
 }
@@ -72,7 +72,7 @@ func (s *streamer) Subscribe(ctx context.Context, streamID string, start int64) 
 	sub := &subscription{topic: streamID, events: events}
 	sub.position = locker.New(&position{
 		idx:  start,
-		size: es.AllEvents,
+		size: ev.AllEvents,
 	})
 	sub.unsub = s.delete(streamID, sub)
 
@@ -232,7 +232,7 @@ func (s *subscription) Recv(ctx context.Context) <-chan bool {
 			_, span := lg.Span(ctx)
 			defer span.End()
 
-			if position.size == es.AllEvents {
+			if position.size == ev.AllEvents {
 				return nil
 			}
 			if position.size == 0 {

@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
 	"go.uber.org/multierr"
@@ -24,7 +24,7 @@ func aggRequest(id string) string { return "pf-request-" + id }
 func aggPeer(id string) string    { return "pf-peer-" + id }
 
 type service struct {
-	es        *es.EventStore
+	es        *ev.EventStore
 	statusURL string
 
 	state *locker.Locked[state]
@@ -37,7 +37,7 @@ type state struct {
 	requests map[string]*Request
 }
 
-func New(ctx context.Context, es *es.EventStore, statusURL string) (*service, error) {
+func New(ctx context.Context, es *ev.EventStore, statusURL string) (*service, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 

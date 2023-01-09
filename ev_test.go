@@ -1,4 +1,4 @@
-package es_test
+package ev_test
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"github.com/matryer/is"
 	"go.uber.org/multierr"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/app/peerfinder"
-	"github.com/sour-is/ev/pkg/es"
 	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
 	"github.com/sour-is/ev/pkg/es/driver/projecter"
 	resolvelinks "github.com/sour-is/ev/pkg/es/driver/resolve-links"
@@ -79,17 +79,17 @@ func TestES(t *testing.T) {
 	is.NoErr(err)
 
 	{
-		store, err := es.Open(ctx, "mem")
-		is.True(errors.Is(err, es.ErrNoDriver))
+		store, err := ev.Open(ctx, "mem")
+		is.True(errors.Is(err, ev.ErrNoDriver))
 		is.True(store.EventStream() == nil)
 	}
 
 	{
-		_, err := es.Open(ctx, "bogo:")
-		is.True(errors.Is(err, es.ErrNoDriver))
+		_, err := ev.Open(ctx, "bogo:")
+		is.True(errors.Is(err, ev.ErrNoDriver))
 	}
 
-	store, err := es.Open(ctx, "mem:", streamer.New(ctx), projecter.New(ctx))
+	store, err := ev.Open(ctx, "mem:", streamer.New(ctx), projecter.New(ctx))
 	is.NoErr(err)
 
 	thing := &Thing{Name: "time"}
@@ -135,10 +135,10 @@ func TestESOperations(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	store, err := es.Open(ctx, "mem:", streamer.New(ctx), projecter.New(ctx))
+	store, err := ev.Open(ctx, "mem:", streamer.New(ctx), projecter.New(ctx))
 	is.NoErr(err)
 
-	thing, err := es.Create(ctx, store, "thing-1", func(ctx context.Context, agg *Thing) error {
+	thing, err := ev.Create(ctx, store, "thing-1", func(ctx context.Context, agg *Thing) error {
 		return agg.OnSetValue("foo")
 	})
 
@@ -146,7 +146,7 @@ func TestESOperations(t *testing.T) {
 	is.Equal(thing.Version(), uint64(1))
 	is.Equal(thing.Value, "foo")
 
-	thing, err = es.Update(ctx, store, "thing-1", func(ctx context.Context, agg *Thing) error {
+	thing, err = ev.Update(ctx, store, "thing-1", func(ctx context.Context, agg *Thing) error {
 		return agg.OnSetValue("bar")
 	})
 
@@ -154,7 +154,7 @@ func TestESOperations(t *testing.T) {
 	is.Equal(thing.Version(), uint64(2))
 	is.Equal(thing.Value, "bar")
 
-	thing, err = es.Upsert(ctx, store, "thing-2", func(ctx context.Context, agg *Thing) error {
+	thing, err = ev.Upsert(ctx, store, "thing-2", func(ctx context.Context, agg *Thing) error {
 		return agg.OnSetValue("bin")
 	})
 
@@ -162,7 +162,7 @@ func TestESOperations(t *testing.T) {
 	is.Equal(thing.Version(), uint64(1))
 	is.Equal(thing.Value, "bin")
 
-	thing, err = es.Upsert(ctx, store, "thing-2", func(ctx context.Context, agg *Thing) error {
+	thing, err = ev.Upsert(ctx, store, "thing-2", func(ctx context.Context, agg *Thing) error {
 		return agg.OnSetValue("baz")
 	})
 
@@ -178,8 +178,8 @@ func TestUnwrap(t *testing.T) {
 	err := errors.New("foo")
 	werr := fmt.Errorf("wrap: %w", err)
 
-	is.Equal(es.Unwrap(werr), err)
-	is.Equal(es.Unwrap("test"), "")
+	is.Equal(ev.Unwrap(werr), err)
+	is.Equal(ev.Unwrap("test"), "")
 }
 
 func TestUnwrapProjector(t *testing.T) {
@@ -188,7 +188,7 @@ func TestUnwrapProjector(t *testing.T) {
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 
-	es, err := es.Open(
+	es, err := ev.Open(
 		ctx,
 		"mem:",
 		resolvelinks.New(),
@@ -211,7 +211,7 @@ func TestMain(m *testing.M) {
 	defer stop()
 
 	err := multierr.Combine(
-		es.Init(ctx),
+		ev.Init(ctx),
 		event.Init(ctx),
 		memstore.Init(ctx),
 	)

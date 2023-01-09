@@ -1,4 +1,4 @@
-package main
+package mux_test
 
 import (
 	"net/http"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
+	"github.com/sour-is/ev/pkg/mux"
 )
 
 type mockHTTP struct {
@@ -15,7 +16,6 @@ type mockHTTP struct {
 func (m *mockHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.onServeHTTP()
 }
-
 func (h *mockHTTP) RegisterHTTP(mux *http.ServeMux) {
 	mux.Handle("/", h)
 }
@@ -28,7 +28,8 @@ func TestHttpMux(t *testing.T) {
 
 	called := false
 
-	mux := httpMux(&mockHTTP{func() { called = true }})
+	mux := mux.New()
+	mux.Add(&mockHTTP{func() { called = true }})
 
 	is.True(mux != nil)
 

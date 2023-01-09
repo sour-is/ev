@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
@@ -24,14 +24,14 @@ type memstore struct {
 	state *locker.Locked[state]
 }
 
-const AppendOnly = es.AppendOnly
-const AllEvents = es.AllEvents
+const AppendOnly = ev.AppendOnly
+const AllEvents = ev.AllEvents
 
 func Init(ctx context.Context) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	return es.Register(ctx, "mem", &memstore{})
+	return ev.Register(ctx, "mem", &memstore{})
 }
 
 var _ driver.Driver = (*memstore)(nil)
@@ -84,7 +84,7 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 
 		last := uint64(len(*stream))
 		if version != AppendOnly && version != last {
-			return fmt.Errorf("%w: current version wrong %d != %d", es.ErrWrongVersion, version, last)
+			return fmt.Errorf("%w: current version wrong %d != %d", ev.ErrWrongVersion, version, last)
 		}
 
 		for i := range events {

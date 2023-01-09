@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 )
@@ -18,7 +18,7 @@ func New() *resolvelinks {
 	return &resolvelinks{}
 }
 
-func (r *resolvelinks) Apply(es *es.EventStore) {
+func (r *resolvelinks) Apply(es *ev.EventStore) {
 	r.up = es.Driver
 	es.Driver = r
 }
@@ -77,7 +77,7 @@ func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Eve
 		}
 		ptr := ptrs[streamID]
 		lis, err := d.ReadN(ctx, ids...)
-		if err != nil && !errors.Is(err, es.ErrNotFound) {
+		if err != nil && !errors.Is(err, ev.ErrNotFound) {
 			return nil, err
 		}
 

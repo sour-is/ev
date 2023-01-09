@@ -19,8 +19,8 @@ import (
 	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/multierr"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
 )
@@ -31,7 +31,7 @@ type DNSResolver interface {
 
 type service struct {
 	baseURL string
-	es      *es.EventStore
+	es      *ev.EventStore
 	dns     DNSResolver
 
 	m_create_user  syncint64.Counter
@@ -54,7 +54,7 @@ type SaltyResolver interface {
 	IsResolver()
 }
 
-func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, error) {
+func New(ctx context.Context, es *ev.EventStore, baseURL string) (*service, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
@@ -111,22 +111,22 @@ func New(ctx context.Context, es *es.EventStore, baseURL string) (*service, erro
 	return svc, errs
 }
 
-func (s *service) IsResolver() {}
-
 func (s *service) BaseURL() string {
 	if s == nil {
 		return "http://missing.context/"
 	}
 	return s.baseURL
 }
-func (s *service) RegisterHTTP(mux *http.ServeMux) {
-	mux.Handle("/.well-known/salty/", lg.Htrace(s, "lookup"))
-}
+
+func (s *service) RegisterHTTP(mux *http.ServeMux) {}
 func (s *service) RegisterAPIv1(mux *http.ServeMux) {
 	mux.HandleFunc("/ping", s.apiv1)
 	mux.HandleFunc("/register", s.apiv1)
 	mux.HandleFunc("/lookup/", s.apiv1)
 	mux.HandleFunc("/send", s.apiv1)
+}
+func (s *service) RegisterWellKnown(mux *http.ServeMux) {
+	mux.Handle("/salty/", lg.Htrace(s, "lookup"))
 }
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -140,7 +140,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	addr = strings.TrimSuffix(addr, ".json")
 
 	span.AddEvent(fmt.Sprint("find ", addr))
-	a, err := es.Update(ctx, s.es, addr, func(ctx context.Context, agg *SaltyUser) error { return nil })
+	a, err := ev.Update(ctx, s.es, addr, func(ctx context.Context, agg *SaltyUser) error { return nil })
 	switch {
 	case errors.Is(err, event.ErrShouldExist):
 		span.RecordError(err)
@@ -168,6 +168,16 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 	}
 }
+
+func (s *service) IsResolver() {}
+func (s *service) GetMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(gql.ToContext(r.Context(), saltyKey, s))
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 func (s *service) CreateSaltyUser(ctx context.Context, nick string, pub string) (*SaltyUser, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -191,11 +201,11 @@ func (s *service) createSaltyUser(ctx context.Context, streamID, pub string) (*S
 		return nil, err
 	}
 
-	a, err := es.Create(ctx, s.es, streamID, func(ctx context.Context, agg *SaltyUser) error {
+	a, err := ev.Create(ctx, s.es, streamID, func(ctx context.Context, agg *SaltyUser) error {
 		return agg.OnUserRegister(key)
 	})
 	switch {
-	case errors.Is(err, es.ErrShouldNotExist):
+	case errors.Is(err, ev.ErrShouldNotExist):
 		span.RecordError(err)
 		return nil, fmt.Errorf("user exists: %w", err)
 
@@ -217,9 +227,9 @@ func (s *service) SaltyUser(ctx context.Context, nick string) (*SaltyUser, error
 	streamID := fmt.Sprintf("saltyuser-%x", sha256.Sum256([]byte(strings.ToLower(nick))))
 	span.AddEvent(streamID)
 
-	a, err := es.Update(ctx, s.es, streamID, func(ctx context.Context, agg *SaltyUser) error { return nil })
+	a, err := ev.Update(ctx, s.es, streamID, func(ctx context.Context, agg *SaltyUser) error { return nil })
 	switch {
-	case errors.Is(err, es.ErrShouldExist):
+	case errors.Is(err, ev.ErrShouldExist):
 		span.RecordError(err)
 		return nil, fmt.Errorf("user not found")
 
@@ -229,14 +239,6 @@ func (s *service) SaltyUser(ctx context.Context, nick string) (*SaltyUser, error
 	}
 
 	return a, err
-}
-func (s *service) GetMiddleware() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r = r.WithContext(gql.ToContext(r.Context(), saltyKey, s))
-			next.ServeHTTP(w, r)
-		})
-	}
 }
 
 func (s *service) apiv1(w http.ResponseWriter, r *http.Request) {

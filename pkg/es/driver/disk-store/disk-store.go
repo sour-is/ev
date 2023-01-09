@@ -16,9 +16,9 @@ import (
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
 	"go.uber.org/multierr"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/cache"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/driver"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/locker"
@@ -41,8 +41,8 @@ type diskStore struct {
 	m_disk_write syncint64.Counter
 }
 
-const AppendOnly = es.AppendOnly
-const AllEvents = es.AllEvents
+const AppendOnly = ev.AppendOnly
+const AllEvents = ev.AllEvents
 
 func Init(ctx context.Context) error {
 	ctx, span := lg.Span(ctx)
@@ -65,7 +65,7 @@ func Init(ctx context.Context) error {
 	d.m_disk_write, err = m.SyncInt64().Counter("disk_write")
 	errs = multierr.Append(errs, err)
 
-	es.Register(ctx, "file", d)
+	ev.Register(ctx, "file", d)
 
 	return errs
 }
@@ -204,7 +204,7 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 		}
 
 		if version != AppendOnly && version != last {
-			err = fmt.Errorf("%w: current version wrong %d != %d", es.ErrWrongVersion, version, last)
+			err = fmt.Errorf("%w: current version wrong %d != %d", ev.ErrWrongVersion, version, last)
 			span.RecordError(err)
 			return err
 		}
@@ -411,7 +411,7 @@ func readStream(ctx context.Context, stream *wal.Log, index uint64) (event.Event
 	b, err = stream.Read(index)
 	if err != nil {
 		if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {
-			err = fmt.Errorf("%w: empty", es.ErrNotFound)
+			err = fmt.Errorf("%w: empty", ev.ErrNotFound)
 		}
 
 		span.RecordError(err)
@@ -444,7 +444,7 @@ func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.E
 		b, err = stream.Read(idx)
 		if err != nil {
 			if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {
-				err = fmt.Errorf("%w: empty", es.ErrNotFound)
+				err = fmt.Errorf("%w: empty", ev.ErrNotFound)
 			}
 
 			span.RecordError(err)

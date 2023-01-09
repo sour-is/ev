@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/set"
 )
@@ -151,7 +151,7 @@ func (s *service) cleanRequests(ctx context.Context, now time.Time) error {
 
 	for {
 		events, err := s.es.Read(ctx, queueRequests, startPosition, 1000) // read 1000 from the top each loop.
-		if err != nil && !errors.Is(err, es.ErrNotFound) {
+		if err != nil && !errors.Is(err, ev.ErrNotFound) {
 			span.RecordError(err)
 			return err
 		}

@@ -60,7 +60,7 @@ func parseInto(c string, s *set.BoundSet[int8]) *set.BoundSet[int8] {
 // 24hour time. Any of the values may be -1 as an "any" match, so passing in
 // a day of -1, the event occurs every day; passing in a second value of -1, the
 // event will fire every second that the other parameters match.
-func (c *cron) NewJob(expr string, task task) {
+func (c *cron) NewCron(expr string, task func(context.Context, time.Time) error) {
 	sp := append(strings.Fields(expr), make([]string, 5)...)[:5]
 
 	job := job{
@@ -73,7 +73,7 @@ func (c *cron) NewJob(expr string, task task) {
 	}
 	c.jobs = append(c.jobs, job)
 }
-func (c *cron) Once(ctx context.Context, once task) {
+func (c *cron) RunOnce(ctx context.Context, once func(context.Context, time.Time) error) {
 	c.state.Modify(ctx, func(ctx context.Context, state *state) error {
 		state.queue = append(state.queue, once)
 		return nil

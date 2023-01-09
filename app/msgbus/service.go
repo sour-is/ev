@@ -17,14 +17,14 @@ import (
 	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/multierr"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 	"github.com/sour-is/ev/pkg/gql"
 )
 
 type service struct {
-	es *es.EventStore
+	es *ev.EventStore
 
 	m_gql_posts            syncint64.Counter
 	m_gql_post_added       syncint64.Counter
@@ -38,7 +38,7 @@ type MsgbusResolver interface {
 	IsResolver()
 }
 
-func New(ctx context.Context, es *es.EventStore) (*service, error) {
+func New(ctx context.Context, es *ev.EventStore) (*service, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
@@ -243,7 +243,7 @@ func (s *service) get(w http.ResponseWriter, r *http.Request) {
 		first = lis[0]
 	}
 
-	var pos, count int64 = 0, es.AllEvents
+	var pos, count int64 = 0, ev.AllEvents
 	qry := r.URL.Query()
 
 	if i, err := strconv.ParseInt(qry.Get("index"), 10, 64); err == nil && i > 1 {

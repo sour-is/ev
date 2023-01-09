@@ -5,4 +5,4 @@ data/
 local.mk
 logzio.yml
 tmp/
-ev
+/ev

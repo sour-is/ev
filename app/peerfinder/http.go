@@ -19,8 +19,8 @@ import (
 	contentnegotiation "gitlab.com/jamietanna/content-negotiation-go"
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es"
 	"github.com/sour-is/ev/pkg/es/event"
 )
 
@@ -150,7 +150,7 @@ func (s *service) getPending(w http.ResponseWriter, r *http.Request, peerID stri
 		return
 	}
 
-	info, err := es.Upsert(ctx, s.es, aggInfo, func(ctx context.Context, agg *Info) error {
+	info, err := ev.Upsert(ctx, s.es, aggInfo, func(ctx context.Context, agg *Info) error {
 		return agg.OnUpsert() // initialize if not exists
 	})
 	if err != nil {

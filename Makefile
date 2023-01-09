@@ -9,10 +9,10 @@ air: gen
 ifeq (, $(shell which air))
 	go install github.com/cosmtrek/air@latest
 endif
-	air
+	air ./cmd/ev
 
 run:
-	go run  .
+	go run  ./cmd/ev
 
 test:
 	go test -cover -race ./...
@@ -25,6 +25,8 @@ GQLS:=$(GQLS) $(wildcard app/*/*.graphqls)
 GQLS:=$(GQLS) $(wildcard app/*/*.go)
 GQLSRC=internal/graph/generated/generated.go
 
+clean:
+	rm -f "$(GQLSRC)" 
 gen: gql
 gql: $(GQLSRC)
 $(GQLSRC): $(GQLS)

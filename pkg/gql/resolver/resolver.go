@@ -52,12 +52,14 @@ outer:
 			rs := reflect.ValueOf(resolvers[i])
 
 			if field.IsNil() && rs.Type().Implements(field.Type()) {
+				// log.Print("found ", field.Type().Name())
 				span.AddEvent(fmt.Sprint("found ", field.Type().Name()))
 				field.Set(rs)
 				continue outer
 			}
 		}
 
+		// log.Print(fmt.Sprint("default ", field.Type().Name()))
 		span.AddEvent(fmt.Sprint("default ", field.Type().Name()))
 		field.Set(noop)
 	}

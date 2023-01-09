@@ -14,6 +14,10 @@ model:
   filename: internal/graph/model/models_gen.go
   package: model
 
+resolver:
+  filename: internal/graph/resolver/resolver.go
+  package: resolver
+
 models:
   ID:
     model:

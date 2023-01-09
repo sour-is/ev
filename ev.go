@@ -1,5 +1,5 @@
 // package es implements an event store and drivers for extending its functionality.
-package es
+package ev
 
 import (
 	"context"
