@@ -108,4 +108,3 @@ func (p *PeerResults) ApplyEvent(lis ...event.Event) {
 		}
 	}
 }
-

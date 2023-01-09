@@ -1,7 +1,6 @@
 package mux
 
 import (
-	"log"
 	"net/http"
 )
 
@@ -13,16 +12,16 @@ type mux struct {
 
 func (mux *mux) Add(fns ...interface{ RegisterHTTP(*http.ServeMux) }) {
 	for _, fn := range fns {
-		log.Printf("HTTP: %T", fn)
+		// log.Printf("HTTP: %T", fn)
 		fn.RegisterHTTP(mux.ServeMux)
 
 		if fn, ok := fn.(interface{ RegisterAPIv1(*http.ServeMux) }); ok {
-			log.Printf("APIv1: %T", fn)
+			// log.Printf("APIv1: %T", fn)
 			fn.RegisterAPIv1(mux.api)
 		}
 
 		if fn, ok := fn.(interface{ RegisterWellKnown(*http.ServeMux) }); ok {
-			log.Printf("WellKnown: %T", fn)
+			// log.Printf("WellKnown: %T", fn)
 			fn.RegisterWellKnown(mux.wellknown)
 		}
 	}
