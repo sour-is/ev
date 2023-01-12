@@ -335,7 +335,7 @@ func Create[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 		attribute.String("agg.streamID", streamID),
 	)
 
-	if err = es.Load(ctx, agg); err != nil {
+	if err = es.Load(ctx, agg); err != nil && !errors.Is(err, ErrNotFound){
 		return
 	}
 

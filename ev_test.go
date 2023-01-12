@@ -94,7 +94,7 @@ func TestES(t *testing.T) {
 
 	thing := &Thing{Name: "time"}
 	err = store.Load(ctx, thing)
-	is.NoErr(err)
+	is.True(errors.Is(err, ev.ErrNotFound))
 
 	t.Log(thing.StreamVersion(), thing.Name, thing.Value)
 
