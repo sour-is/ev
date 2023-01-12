@@ -94,6 +94,15 @@ func (jrd *JRD) GetProperty(uri string) string {
 	}
 	return *jrd.Properties[uri]
 }
+func (a *JRD) SetProperty(name string, value *string) {
+	if a.Properties == nil {
+		a.Properties = make(map[string]*string)
+	}
+	a.Properties[name] = value
+}
+func (a *JRD) IsDeleted() bool {
+	return a.deleted
+}
 
 // GetProperty Returns the property value as a string.
 // Per spec a property value can be null, empty string is returned in this case.
@@ -115,6 +124,8 @@ func (a *JRD) ApplyEvent(events ...event.Event) {
 	for _, e := range events {
 		switch e := e.(type) {
 		case *SubjectSet:
+			a.deleted = false
+
 			a.Subject = e.Subject
 			a.Aliases = e.Aliases
 			a.Properties = e.Properties
@@ -122,7 +133,6 @@ func (a *JRD) ApplyEvent(events ...event.Event) {
 		case *SubjectDeleted:
 			a.deleted = true
 
-			a.Subject = ""
 			a.Aliases = a.Aliases[:0]
 			a.Links = a.Links[:0]
 			a.Properties = map[string]*string{}
@@ -148,20 +158,35 @@ func (a *JRD) ApplyEvent(events ...event.Event) {
 
 const NSpubkey = "https://sour.is/ns/pub"
 
-func (a *JRD) OnClaims(method, pubkey string, jrd *JRD) error {
-	if a.Version() > 0 {
+func (a *JRD) OnDelete(pubkey string, jrd *JRD) error {
+	if a.Version() == 0 || a.IsDeleted() {
+		return nil
+	}
+
+	if v, ok := a.Properties[NSpubkey]; ok && v != nil && *v == pubkey {
+		// pubkey matches!
+	} else {
+		return fmt.Errorf("pubkey does not match")
+	}
+
+	if a.Subject != jrd.Subject {
+		return fmt.Errorf("subject does not match")
+	}
+
+	event.Raise(a, &SubjectDeleted{Subject: jrd.Subject})
+	return nil
+}
+
+func (a *JRD) OnClaims(pubkey string, jrd *JRD) error {
+	if a.Version() > 0 && !a.IsDeleted() {
 		if v, ok := a.Properties[NSpubkey]; ok && v != nil && *v == pubkey {
 			// pubkey matches!
 		} else {
 			return fmt.Errorf("pubkey does not match")
 		}
+
 		if a.Subject != jrd.Subject {
 			return fmt.Errorf("subject does not match")
-		}
-
-		if method == "DELETE" {
-			event.Raise(a, &SubjectDeleted{Subject: jrd.Subject})
-			return nil
 		}
 	}
 
@@ -231,7 +256,15 @@ func (a *JRD) OnSubjectSet(subject string, aliases []string, props map[string]*s
 		slice.Zip(slice.FromMap(props)),
 		slice.Zip(slice.FromMap(a.Properties)),
 	) {
-		if z.Key != z.Value {
+		newValue := z.Key
+		curValue := z.Value
+
+		if newValue.Key != curValue.Key {
+			modified = true
+			break
+		}
+
+		if !cmpPtr(newValue.Value, curValue.Value) {
 			modified = true
 			break
 		}
@@ -278,7 +311,15 @@ func (a *JRD) OnLinkSet(o, n *Link) error {
 		slice.Zip(slice.FromMap(n.Properties)),
 		slice.Zip(slice.FromMap(o.Properties)),
 	) {
-		if z.Key != z.Value {
+		newValue := z.Key
+		curValue := z.Value
+
+		if newValue.Key != curValue.Key {
+			modified = true
+			break
+		}
+
+		if !cmpPtr(newValue.Value, curValue.Value) {
 			modified = true
 			break
 		}
@@ -291,13 +332,14 @@ func (a *JRD) OnLinkSet(o, n *Link) error {
 	return nil
 }
 
-func (a *JRD) IsDeleted() bool {
-	return a.deleted
-}
-
-func (a *JRD) SetProperty(name string, value *string) {
-	if a.Properties == nil {
-		a.Properties = make(map[string]*string)
+func cmpPtr[T comparable](l, r *T) bool {
+	if l == nil {
+		return r == nil
 	}
-	a.Properties[name] = value
+
+	if r == nil {
+		return l == nil
+	}
+
+	return *l == *r
 }

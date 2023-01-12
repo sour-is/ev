@@ -117,8 +117,10 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		a, err := ev.Upsert(ctx, s.es, StreamID(c.Subject), func(ctx context.Context, a *JRD) error {
-			a.OnClaims(r.Method, c.PubKey, c.JRD)
-			return nil
+			if r.Method == http.MethodDelete {
+				return a.OnDelete(c.PubKey, c.JRD)
+			}
+			return a.OnClaims(c.PubKey, c.JRD)
 		})
 
 		if err != nil {

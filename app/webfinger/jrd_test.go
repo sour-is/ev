@@ -158,7 +158,7 @@ func TestApplyEvents(t *testing.T) {
 	}
 
 	t.Log(string(s))
-	if string(s) != `{}` {
+	if string(s) != `{"subject":"acct:me@sour.is"}` {
 		t.Fatal("output does not match")
 	}
 }
@@ -227,7 +227,7 @@ func TestCommands(t *testing.T) {
 
 	t.Logf("%#v", c)
 	a, err := ev.Upsert(ctx, es, webfinger.StreamID(c.Subject), func(ctx context.Context, a *webfinger.JRD) error {
-		a.OnClaims("POST", c.PubKey, c.JRD)
+		a.OnClaims(c.PubKey, c.JRD)
 		return nil
 	})
 	is.NoErr(err)
