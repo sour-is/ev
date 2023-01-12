@@ -34,6 +34,22 @@ func (s Set[T]) Delete(items ...T) Set[T] {
 	return s
 }
 
+func (s Set[T]) Equal(e Set[T]) bool {
+	for k := range s {
+		if _, ok := e[k]; !ok{
+			return false
+		}
+	}
+
+	for k := range e {
+		if _, ok := s[k]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (s Set[T]) String() string {
 	if s == nil {
 		return "set(<nil>)"

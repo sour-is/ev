@@ -164,6 +164,9 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 	if err != nil {
 		return err
 	}
+	if len(events) == 0 {
+		return ErrNotFound
+	}
 
 	Mes_load.Add(ctx, events.Count())
 	event.Append(agg, events...)
@@ -395,7 +398,7 @@ func Upsert[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 		attribute.String("agg.streamID", streamID),
 	)
 
-	if err = es.Load(ctx, agg); err != nil {
+	if err = es.Load(ctx, agg); err != nil && !errors.Is(err, ErrNotFound) {
 		return
 	}
 

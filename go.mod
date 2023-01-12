@@ -100,6 +100,7 @@ require (
 )
 
 require (
+	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/keys-pub/keys v0.1.22
 	github.com/matryer/is v1.4.0
 	github.com/oklog/ulid/v2 v2.1.0
