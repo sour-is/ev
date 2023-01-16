@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/app/webfinger"
 	"github.com/sour-is/ev/internal/lg"
+	"github.com/sour-is/ev/pkg/env"
 	"github.com/sour-is/ev/pkg/service"
 	"github.com/sour-is/ev/pkg/slice"
 )
@@ -21,7 +23,12 @@ var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error 
 		return fmt.Errorf("*es.EventStore not found in services")
 	}
 
-	wf, err := webfinger.New(ctx, eventstore)
+	wf, err := webfinger.New(
+		ctx, 
+		eventstore, 
+		webfinger.WithHostnames(
+			strings.Fields(env.Default("WEBFINGER_DOMAINS", "sour.is")),
+		))
 	if err != nil {
 		span.RecordError(err)
 		return err

@@ -1,6 +1,7 @@
 package webfinger
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,9 @@ import (
 	"sort"
 
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/set"
 	"github.com/sour-is/ev/pkg/slice"
+	"gopkg.in/yaml.v3"
 )
 
 func StreamID(subject string) string {
@@ -20,13 +23,13 @@ func StreamID(subject string) string {
 // JRD is a JSON Resource Descriptor, specifying properties and related links
 // for a resource.
 type JRD struct {
-	Subject    string             `json:"subject,omitempty"`
-	Aliases    []string           `json:"aliases,omitempty"`
-	Properties map[string]*string `json:"properties,omitempty"`
-	Links      Links              `json:"links,omitempty"`
+	Subject    string             `json:"subject,omitempty" yaml:"subject,omitempty"`
+	Aliases    []string           `json:"aliases,omitempty" yaml:"aliases,omitempty"`
+	Properties map[string]*string `json:"properties,omitempty" yaml:"properties,omitempty"`
+	Links      Links              `json:"links,omitempty" yaml:"links,omitempty"`
 
-	deleted bool
-	event.AggregateRoot
+	deleted             bool
+	event.AggregateRoot `yaml:"-"`
 }
 
 var _ event.Aggregate = (*JRD)(nil)
@@ -86,6 +89,19 @@ func (jrd *JRD) GetLinkByRel(rel string) *Link {
 	return nil
 }
 
+// GetLinksByRel returns the first *Link with the specified rel value.
+func (jrd *JRD) GetLinksByRel(rel ...string) []*Link {
+	var lis []*Link
+	rels := set.New(rel...)
+
+	for _, link := range jrd.Links {
+		if rels.Has(link.Rel) {
+			lis = append(lis, link)
+		}
+	}
+	return lis
+}
+
 // GetProperty Returns the property value as a string.
 // Per spec a property value can be null, empty string is returned in this case.
 func (jrd *JRD) GetProperty(uri string) string {
@@ -99,6 +115,12 @@ func (a *JRD) SetProperty(name string, value *string) {
 		a.Properties = make(map[string]*string)
 	}
 	a.Properties[name] = value
+}
+func (a *JRD) DeleteProperty(name string) {
+	if a.Properties == nil {
+		return
+	}
+	delete(a.Properties, name)
 }
 func (a *JRD) IsDeleted() bool {
 	return a.deleted
@@ -118,6 +140,12 @@ func (link *Link) SetProperty(name string, value *string) {
 	}
 	link.Properties[name] = value
 }
+func (link *Link) DeleteProperty(name string) {
+	if link.Properties == nil {
+		return
+	}
+	delete(link.Properties, name)
+}
 
 // ApplyEvent implements event.Aggregate
 func (a *JRD) ApplyEvent(events ...event.Event) {
@@ -133,6 +161,7 @@ func (a *JRD) ApplyEvent(events ...event.Event) {
 		case *SubjectDeleted:
 			a.deleted = true
 
+			a.Subject = e.Subject
 			a.Aliases = a.Aliases[:0]
 			a.Links = a.Links[:0]
 			a.Properties = map[string]*string{}
@@ -156,41 +185,43 @@ func (a *JRD) ApplyEvent(events ...event.Event) {
 	}
 }
 
-const NSpubkey = "https://sour.is/ns/pub"
+const NSauth = "https://sour.is/ns/auth"
+const NSpubkey = "https://sour.is/ns/pubkey"
+const NSredirect = "https://sour.is/rel/redirect"
 
-func (a *JRD) OnDelete(pubkey string, jrd *JRD) error {
-	if a.Version() == 0 || a.IsDeleted() {
-		return nil
-	}
+func (a *JRD) OnAuth(claim, auth *JRD) error {
+	pubkey := claim.Properties[NSpubkey]
 
-	if v, ok := a.Properties[NSpubkey]; ok && v != nil && *v == pubkey {
+	if v, ok := auth.Properties[NSpubkey]; ok && v != nil && cmpPtr(v, pubkey) {
 		// pubkey matches!
 	} else {
 		return fmt.Errorf("pubkey does not match")
 	}
 
-	if a.Subject != jrd.Subject {
+	if a.Version() > 0 && !a.IsDeleted() && a.Subject != claim.Subject {
 		return fmt.Errorf("subject does not match")
+	}
+
+	if auth.Subject == claim.Subject {
+		claim.SetProperty(NSpubkey, pubkey)
+	} else {
+		claim.SetProperty(NSauth, &auth.Subject)
+		claim.DeleteProperty(NSpubkey)
+	}
+
+	return nil
+}
+
+func (a *JRD) OnDelete(jrd *JRD) error {
+	if a.Version() == 0 || a.IsDeleted() {
+		return nil
 	}
 
 	event.Raise(a, &SubjectDeleted{Subject: jrd.Subject})
 	return nil
 }
 
-func (a *JRD) OnClaims(pubkey string, jrd *JRD) error {
-	if a.Version() > 0 && !a.IsDeleted() {
-		if v, ok := a.Properties[NSpubkey]; ok && v != nil && *v == pubkey {
-			// pubkey matches!
-		} else {
-			return fmt.Errorf("pubkey does not match")
-		}
-
-		if a.Subject != jrd.Subject {
-			return fmt.Errorf("subject does not match")
-		}
-	}
-
-	jrd.SetProperty(NSpubkey, &pubkey)
+func (a *JRD) OnClaims(jrd *JRD) error {
 
 	err := a.OnSubjectSet(jrd.Subject, jrd.Aliases, jrd.Properties)
 	if err != nil {
@@ -342,4 +373,12 @@ func cmpPtr[T comparable](l, r *T) bool {
 	}
 
 	return *l == *r
+}
+
+func (a *JRD) String() string {
+	b := &bytes.Buffer{}
+	y := yaml.NewEncoder(b)
+	_ = y.Encode(a)
+
+	return b.String()
 }

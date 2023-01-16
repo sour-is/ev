@@ -154,8 +154,12 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 		attribute.String("agg.type", event.TypeOf(agg)),
 		attribute.String("agg.streamID", agg.StreamID()),
 	)
-
 	l, err := es.Driver.EventLog(ctx, agg.StreamID())
+	if err != nil {
+		return err
+	}
+
+	first, err := l.FirstIndex(ctx)
 	if err != nil {
 		return err
 	}
@@ -169,6 +173,7 @@ func (es *EventStore) Load(ctx context.Context, agg event.Aggregate) error {
 	}
 
 	Mes_load.Add(ctx, events.Count())
+	event.Start(agg, first-1)
 	event.Append(agg, events...)
 
 	span.SetAttributes(
@@ -335,7 +340,7 @@ func Create[A any, T PA[A]](ctx context.Context, es *EventStore, streamID string
 		attribute.String("agg.streamID", streamID),
 	)
 
-	if err = es.Load(ctx, agg); err != nil && !errors.Is(err, ErrNotFound){
+	if err = es.Load(ctx, agg); err != nil && !errors.Is(err, ErrNotFound) {
 		return
 	}
 

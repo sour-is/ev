@@ -15,7 +15,9 @@ import (
 )
 
 var _ = apps.Register(20, func(ctx context.Context, svc *service.Harness) error {
-	s := &http.Server{}
+	s := &http.Server{
+		
+	}
 	svc.Add(s)
 
 	mux := mux.New()

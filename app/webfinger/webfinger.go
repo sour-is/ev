@@ -9,19 +9,32 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/internal/lg"
 	"github.com/sour-is/ev/pkg/es/event"
+	"github.com/sour-is/ev/pkg/set"
 )
 
 type service struct {
-	es *ev.EventStore
+	es   *ev.EventStore
+	self set.Set[string]
 }
 
-func New(ctx context.Context, es *ev.EventStore) (*service, error) {
+type Option interface {
+	ApplyWebfinger(s *service)
+}
+
+type WithHostnames []string
+
+func (o WithHostnames) ApplyWebfinger(s *service) {
+	s.self = set.New(o...)
+}
+
+func New(ctx context.Context, es *ev.EventStore, opts ...Option) (*service, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
@@ -35,6 +48,10 @@ func New(ctx context.Context, es *ev.EventStore) (*service, error) {
 		return nil, err
 	}
 	svc := &service{es: es}
+
+	for _, o := range opts {
+		o.ApplyWebfinger(svc)
+	}
 
 	return svc, nil
 }
@@ -52,7 +69,6 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, http.StatusText(http.StatusNotFound))
 		return
-
 	}
 
 	switch r.Method {
@@ -93,6 +109,8 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				c.JRD.Subject = c.Subject
 				c.StandardClaims.Subject = c.Subject
 
+				c.SetProperty(NSpubkey, &c.PubKey)
+
 				pub, err := dec(c.PubKey)
 				return ed25519.PublicKey(pub), err
 			},
@@ -117,10 +135,52 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		a, err := ev.Upsert(ctx, s.es, StreamID(c.Subject), func(ctx context.Context, a *JRD) error {
-			if r.Method == http.MethodDelete {
-				return a.OnDelete(c.PubKey, c.JRD)
+			var auth *JRD
+
+			// does the target have a pubkey for self auth?
+			if _, ok := a.Properties[NSpubkey]; ok {
+				auth = a
 			}
-			return a.OnClaims(c.PubKey, c.JRD)
+
+			// Check current version for auth.
+			if authID, ok := a.Properties[NSauth]; ok && authID != nil && auth == nil {
+				auth = &JRD{}
+				auth.SetStreamID(StreamID(*authID))
+				err := s.es.Load(ctx, auth)
+				if err != nil {
+					return err
+				}
+			}
+			if a.Version() == 0 || a.IsDeleted() {
+				// else does the new object claim auth from another object?
+				if authID, ok := c.Properties[NSauth]; ok && authID != nil && auth == nil {
+					auth = &JRD{}
+					auth.SetStreamID(StreamID(*authID))
+					err := s.es.Load(ctx, auth)
+					if err != nil {
+						return err
+					}
+				}
+
+				// fall back to use auth from submitted claims
+				if auth == nil {
+					auth = c.JRD
+				}
+			}
+
+			if auth == nil {
+				return fmt.Errorf("auth not found")
+			}
+
+			err = a.OnAuth(c.JRD, auth)
+			if err != nil {
+				return err
+			}
+
+			if r.Method == http.MethodDelete {
+				return a.OnDelete(c.JRD)
+			}
+			return a.OnClaims(c.JRD)
 		})
 
 		if err != nil {
@@ -131,9 +191,17 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/jrd+json")
-		w.WriteHeader(http.StatusCreated)
+		if version := a.Version(); r.Method == http.MethodDelete && version > 0 {
+			err = s.es.Truncate(ctx, a.StreamID(), int64(version))
+			span.RecordError(err)
+		}
 
+		w.Header().Set("Content-Type", "application/jrd+json")
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
 		j := json.NewEncoder(w)
 		j.SetIndent("", "  ")
 		err = j.Encode(a)
@@ -141,6 +209,18 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodGet:
 		resource := r.URL.Query().Get("resource")
+		rels := r.URL.Query()["rel"]
+
+		if u := Parse(resource); u != nil && !s.self.Has(u.URL.Hostname()) {
+			redirect := &url.URL{}
+			redirect.Scheme = "https"
+			redirect.Host = u.URL.Host
+			redirect.RawQuery = r.URL.RawQuery
+			redirect.Path = "/.well-known/webfinger"
+			w.Header().Set("location", redirect.String())
+			w.WriteHeader(http.StatusSeeOther)
+			return
+		}
 
 		a := &JRD{}
 		a.SetStreamID(StreamID(resource))
@@ -165,6 +245,18 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			span.AddEvent("is deleted")
 
 			return
+		}
+
+		if len(rels) > 0 {
+			a.Links = a.GetLinksByRel(rels...)
+		}
+
+		if a.Properties != nil {
+			if redirect, ok := a.Properties[NSredirect]; ok && redirect != nil {
+				w.Header().Set("location", *redirect)
+				w.WriteHeader(http.StatusSeeOther)
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/jrd+json")

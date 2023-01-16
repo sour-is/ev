@@ -100,9 +100,6 @@ func TestEncodeJRD(t *testing.T) {
 	}
 }
 
-//   {                            "properties":{"https://sour.is/ns/pubkey":"kex1d330ama4vnu3vll5dgwjv3k0pcxsccc5k2xy3j8khndggkszsmsq3hl4ru"},"links":[{"rel":"salty:public","type":"application/json+salty","href":"https://ev.sour.is/inbox/01GAEMKXYJ4857JQP1MJGD61Z5","properties":{"pub":"kex1r8zshlvkc787pxvauaq7hd6awa9kmheddxjj9k80qmenyxk6284s50uvpw"}}]}
-//!= {"subject":"acct:me@sour.is","properties":{"https://sour.is/ns/pubkey":"kex1d330ama4vnu3vll5dgwjv3k0pcxsccc5k2xy3j8khndggkszsmsq3hl4ru"},"links":[{"rel":"salty:public","type":"application/json+salty","href":"https://ev.sour.is/inbox/01GAEMKXYJ4857JQP1MJGD61Z5","properties":{"pub":"kex1r8zshlvkc787pxvauaq7hd6awa9kmheddxjj9k80qmenyxk6284s50uvpw"}}]}
-
 func TestApplyEvents(t *testing.T) {
 	is := is.New(t)
 
@@ -158,7 +155,7 @@ func TestApplyEvents(t *testing.T) {
 	}
 
 	t.Log(string(s))
-	if string(s) != `{"subject":"acct:me@sour.is"}` {
+	if string(s) != `{}` {
 		t.Fatal("output does not match")
 	}
 }
@@ -177,6 +174,7 @@ func TestCommands(t *testing.T) {
 		"aliases": []string{"acct:xuu@sour.is"},
 		"properties": map[string]*string{
 			"https://example.com/ns/asdf": nil,
+			webfinger.NSpubkey:            ptr(enc(pub)),
 		},
 		"links": []map[string]any{{
 			"rel":    "salty:public",
@@ -214,6 +212,8 @@ func TestCommands(t *testing.T) {
 			c.JRD.Subject = c.Subject
 			c.StandardClaims.Subject = c.Subject
 
+			c.SetProperty(webfinger.NSpubkey, &c.PubKey)
+
 			pub, err := dec(c.PubKey)
 			return ed25519.PublicKey(pub), err
 		},
@@ -227,8 +227,49 @@ func TestCommands(t *testing.T) {
 
 	t.Logf("%#v", c)
 	a, err := ev.Upsert(ctx, es, webfinger.StreamID(c.Subject), func(ctx context.Context, a *webfinger.JRD) error {
-		a.OnClaims(c.PubKey, c.JRD)
-		return nil
+		var auth *webfinger.JRD
+
+		// does the target have a pubkey for self auth?
+		if _, ok := a.Properties[webfinger.NSpubkey]; ok {
+			auth = a
+		}
+
+		// Check current version for auth.
+		if authID, ok := a.Properties[webfinger.NSauth]; ok && authID != nil && auth == nil {
+			auth = &webfinger.JRD{}
+			auth.SetStreamID(webfinger.StreamID(*authID))
+			err := es.Load(ctx, auth)
+			if err != nil {
+				return err
+			}
+		}
+		if a.Version() == 0 || a.IsDeleted() {
+			// else does the new object claim auth from another object?
+			if authID, ok := c.Properties[webfinger.NSauth]; ok && authID != nil && auth == nil {
+				auth = &webfinger.JRD{}
+				auth.SetStreamID(webfinger.StreamID(*authID))
+				err := es.Load(ctx, auth)
+				if err != nil {
+					return err
+				}
+			}
+
+			// fall back to use auth from submitted claims
+			if auth == nil {
+				auth = c.JRD
+			}
+		}
+
+		if auth == nil {
+			return fmt.Errorf("auth not found")
+		}
+
+		err = a.OnAuth(c.JRD, auth)
+		if err != nil {
+			return err
+		}
+
+		return a.OnClaims(c.JRD)
 	})
 	is.NoErr(err)
 

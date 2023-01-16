@@ -15,6 +15,10 @@ type Aggregate interface {
 	AggregateRootInterface
 }
 
+func Start(a Aggregate, i uint64) {
+	a.start(i)
+}
+
 // Raise adds new uncommitted events
 func Raise(a Aggregate, lis ...Event) {
 	lis = NewEvents(lis...)
@@ -58,6 +62,7 @@ type AggregateRootInterface interface {
 	// Version returns the current aggrigate version. (committed + uncommitted)
 	Version() uint64
 
+	start(uint64)
 	raise(lis ...Event)
 	append(lis ...Event)
 	Commit()
@@ -66,31 +71,37 @@ type AggregateRootInterface interface {
 var _ AggregateRootInterface = &AggregateRoot{}
 
 type AggregateRoot struct {
-	events        Events
-	streamID      string
-	streamVersion uint64
+	events     Events
+	streamID   string
+	firstIndex uint64
+	lastIndex  uint64
 
 	mu sync.RWMutex
 }
 
-func (a *AggregateRoot) Commit()                     { a.streamVersion = uint64(len(a.events)) }
-func (a *AggregateRoot) StreamID() string            { return a.streamID }
-func (a *AggregateRoot) SetStreamID(streamID string) { a.streamID = streamID }
-func (a *AggregateRoot) StreamVersion() uint64       { return a.streamVersion }
-func (a *AggregateRoot) Version() uint64             { return uint64(len(a.events)) }
+func (a *AggregateRoot) Commit()                       { a.lastIndex = uint64(len(a.events)) }
+func (a *AggregateRoot) StreamID() string              { return a.streamID }
+func (a *AggregateRoot) SetStreamID(streamID string)   { a.streamID = streamID }
+func (a *AggregateRoot) StreamVersion() uint64         { return a.lastIndex }
+func (a *AggregateRoot) Version() uint64               { return a.firstIndex + uint64(len(a.events)) }
 func (a *AggregateRoot) Events(new bool) Events {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
 	events := a.events
 	if new {
-		events = events[a.streamVersion:]
+		events = events[a.lastIndex-a.firstIndex:]
 	}
 
 	lis := make(Events, len(events))
 	copy(lis, events)
 
 	return lis
+}
+
+func (a *AggregateRoot) start(i uint64) {
+	a.firstIndex = i
+	a.lastIndex = i
 }
 
 //lint:ignore U1000 is called by embeded interface
@@ -111,13 +122,13 @@ func (a *AggregateRoot) append(lis ...Event) {
 	a.posStartAt(lis...)
 
 	a.events = append(a.events, lis...)
-	a.streamVersion += uint64(len(lis))
+	a.lastIndex += uint64(len(lis))
 }
 
 func (a *AggregateRoot) posStartAt(lis ...Event) {
 	for i, e := range lis {
 		m := e.EventMeta()
-		m.Position = a.streamVersion + uint64(i) + 1
+		m.Position = a.lastIndex + uint64(i) + 1
 		e.SetEventMeta(m)
 	}
 }

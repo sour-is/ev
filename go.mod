@@ -100,6 +100,8 @@ require (
 )
 
 require (
+	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/keys-pub/keys v0.1.22
 	github.com/matryer/is v1.4.0
@@ -112,4 +114,5 @@ require (
 	go.mills.io/saltyim v0.0.0-20220925030055-7c149128b431
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.9.0
 	go.uber.org/multierr v1.8.0
+	gopkg.in/yaml.v3 v3.0.1
 )
