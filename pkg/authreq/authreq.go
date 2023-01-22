@@ -2,6 +2,7 @@ package authreq
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"fmt"
@@ -14,9 +15,10 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
-var SignatureLifetime = 90 * time.Minute
+var SignatureLifetime = 30 * time.Minute
+var AuthHeader = "Authorization"
 
-func Sign(req http.Request, key ed25519.PrivateKey) (http.Request, error) {
+func Sign(req *http.Request, key ed25519.PrivateKey) (*http.Request, error) {
 	pub := enc([]byte(key.Public().(ed25519.PublicKey)))
 
 	h := fnv.New128a()
@@ -44,14 +46,14 @@ func Sign(req http.Request, key ed25519.PrivateKey) (http.Request, error) {
 		return req, err
 	}
 
-	req.Header.Set("Authorization", sig)
+	req.Header.Set(AuthHeader, sig)
 
 	return req, nil
 }
 
 func Authorization(hdlr http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		auth := req.Header.Get("Authorizaton")
+		auth := req.Header.Get(AuthHeader)
 		if auth == "" {
 			rw.WriteHeader(http.StatusUnauthorized)
 			return
@@ -82,7 +84,7 @@ func Authorization(hdlr http.Handler) http.Handler {
 				pub, err := dec(c.Issuer)
 				return ed25519.PublicKey(pub), err
 			},
-			jwt.WithValidMethods([]string{"EdDSA"}),
+			jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
 			jwt.WithJSONNumber(),
 		)
 		if err != nil {
@@ -96,6 +98,8 @@ func Authorization(hdlr http.Handler) http.Handler {
 
 			return
 		}
+
+		req = req.WithContext(context.WithValue(req.Context(), contextKey, c))
 
 		if c.Subject != subject {
 			rw.WriteHeader(http.StatusForbidden)
@@ -112,4 +116,16 @@ func enc(b []byte) string {
 func dec(s string) ([]byte, error) {
 	s = strings.TrimSpace(s)
 	return base64.RawURLEncoding.DecodeString(s)
+}
+
+var contextKey = struct{ name string }{"jwtClaim"}
+
+func FromContext(ctx context.Context) *jwt.RegisteredClaims {
+	if v := ctx.Value(contextKey); v != nil {
+		if c, ok := v.(*jwt.RegisteredClaims); ok {
+			return c
+		}
+	}
+
+	return nil
 }
