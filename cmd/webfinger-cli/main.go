@@ -14,10 +14,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/docopt/docopt-go"
-	"github.com/golang-jwt/jwt"
 	"gopkg.in/yaml.v3"
 
 	"github.com/sour-is/ev/app/webfinger"
@@ -127,23 +125,14 @@ func run(opts opts) error {
 		if err != nil {
 			return err
 		}
-		bkey := []byte(key.Public().(ed25519.PublicKey))
 
-		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
-			"sub":     opts.Subject,
-			"subject": opts.Subject,
-			"pub":     enc(bkey),
-			"exp":     time.Now().Add(90 * time.Minute).Unix(),
-			"iat":     time.Now().Unix(),
-			"aud":     "webfinger",
-			"iss":     "sour.is-webfingerCLI",
-		})
-		aToken, err := token.SignedString(key)
+		jrd := &webfinger.JRD{Subject: opts.Subject}
+		token, err := webfinger.NewSignedRequest(jrd, key)
 		if err != nil {
 			return err
 		}
 
-		body := strings.NewReader(aToken)
+		body := strings.NewReader(token)
 		req, err := http.NewRequest(http.MethodDelete, url.String(), body)
 		if err != nil {
 			return err
@@ -173,7 +162,6 @@ func run(opts opts) error {
 		if err != nil {
 			return err
 		}
-		bkey := []byte(key.Public().(ed25519.PublicKey))
 
 		fmt.Fprintln(os.Stderr, opts.File)
 		fp, err := os.Open(opts.File)
@@ -182,40 +170,20 @@ func run(opts opts) error {
 		}
 		y := yaml.NewDecoder(fp)
 
-		type claims struct {
-			Subject string `json:"sub"`
-			PubKey  string `json:"pub"`
-			*webfinger.JRD
-			jwt.StandardClaims
-		}
-
 		for err == nil {
-			j := claims{
-				PubKey: enc(bkey),
-				JRD:    &webfinger.JRD{},
-				StandardClaims: jwt.StandardClaims{
-					Audience:  "sour.is-webfinger",
-					ExpiresAt: time.Now().Add(30 * time.Minute).Unix(),
-					IssuedAt:  time.Now().Unix(),
-					Issuer:    "sour.is-webfingerCLI",
-				},
-			}
+			jrd := &webfinger.JRD{}
 
-			err = y.Decode(j.JRD)
+			err = y.Decode(jrd)
 			if err != nil {
 				break
 			}
 
-			j.Subject = j.JRD.Subject
-			j.StandardClaims.Subject = j.JRD.Subject
-
-			token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, &j)
-			aToken, err := token.SignedString(key)
+			token, err := webfinger.NewSignedRequest(jrd, key)
 			if err != nil {
 				return err
 			}
 
-			body := strings.NewReader(aToken)
+			body := strings.NewReader(token)
 
 			req, err := http.NewRequest(http.MethodPut, url.String(), body)
 			if err != nil {

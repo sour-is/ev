@@ -24,6 +24,8 @@ require (
 
 require github.com/tj/go-semver v1.0.0
 
+require github.com/patrickmn/go-cache v2.1.0+incompatible
+
 require (
 	git.mills.io/prologic/msgbus v0.1.19 // indirect
 	github.com/ScaleFT/sshkeys v0.0.0-20200327173127-6142f742bca5 // indirect
@@ -101,7 +103,6 @@ require (
 
 require (
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
-	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/keys-pub/keys v0.1.22
 	github.com/matryer/is v1.4.0

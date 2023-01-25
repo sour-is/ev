@@ -21,17 +21,21 @@ func main() {
 		<-ctx.Done()
 		defer cancel() // restore interrupt function
 	}()
-
+	if err := Run(ctx); err != nil {
+		log.Fatal(err)
+		os.Exit(1)
+	}
+}
+func Run(ctx context.Context) error {
 	svc := &service.Harness{}
-
 	ctx, stop := lg.Init(ctx, appName)
 	svc.OnStop(stop)
 	svc.Add(lg.NewHTTP(ctx))
-
 	svc.Setup(ctx, apps.Apps()...)
 
 	// Run application
 	if err := svc.Run(ctx, appName, version); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }

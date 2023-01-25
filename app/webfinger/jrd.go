@@ -32,6 +32,19 @@ type JRD struct {
 	event.AggregateRoot `yaml:"-"`
 }
 
+func (a *JRD) CloneValues() *JRD {
+	m := make(map[string]*string, len(a.Properties))
+	for k,v := range a.Properties {
+		m[k] = v
+	}
+	return &JRD{
+		Subject:       a.Subject,
+		Aliases:       append([]string{}, a.Aliases...),
+		Properties:    m,
+		Links:         append([]*Link{}, a.Links...),
+	}
+}
+
 var _ event.Aggregate = (*JRD)(nil)
 
 // Link is a link to a related resource.

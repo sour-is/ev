@@ -20,8 +20,9 @@ import (
 )
 
 type service struct {
-	es   *ev.EventStore
-	self set.Set[string]
+	es    *ev.EventStore
+	self  set.Set[string]
+	cache func(string) bool
 }
 
 type Option interface {
@@ -32,6 +33,12 @@ type WithHostnames []string
 
 func (o WithHostnames) ApplyWebfinger(s *service) {
 	s.self = set.New(o...)
+}
+
+type WithCache func(string) bool
+
+func (o WithCache) ApplyWebfinger(s *service) {
+	s.cache = o
 }
 
 func New(ctx context.Context, es *ev.EventStore, opts ...Option) (*service, error) {
@@ -91,10 +98,9 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Body.Close()
 
 		type claims struct {
-			Subject string `json:"sub"`
-			PubKey  string `json:"pub"`
+			PubKey string `json:"pub"`
 			*JRD
-			jwt.StandardClaims
+			jwt.RegisteredClaims
 		}
 
 		token, err := jwt.ParseWithClaims(
@@ -106,8 +112,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return nil, fmt.Errorf("wrong type of claim")
 				}
 
-				c.JRD.Subject = c.Subject
-				c.StandardClaims.Subject = c.Subject
+				c.JRD.Subject = c.RegisteredClaims.Subject
 
 				c.SetProperty(NSpubkey, &c.PubKey)
 
@@ -134,7 +139,17 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		a, err := ev.Upsert(ctx, s.es, StreamID(c.Subject), func(ctx context.Context, a *JRD) error {
+		if c.ID != "" && s.cache != nil {
+			if ok := s.cache(c.ID); ok {
+				w.WriteHeader(http.StatusAlreadyReported)
+				fmt.Fprint(w, http.StatusText(http.StatusAlreadyReported))
+				span.AddEvent("already seen ID")
+
+				return
+			}
+		}
+
+		a, err := ev.Upsert(ctx, s.es, StreamID(c.JRD.Subject), func(ctx context.Context, a *JRD) error {
 			var auth *JRD
 
 			// does the target have a pubkey for self auth?
@@ -211,9 +226,16 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resource := r.URL.Query().Get("resource")
 		rels := r.URL.Query()["rel"]
 
-		if u := Parse(resource); u != nil && !s.self.Has(u.URL.Hostname()) {
+		if resource == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		host, _ := splitHostPort(r.Host)
+
+		if u := Parse(resource); u != nil && !s.self.Has(host) {
 			redirect := &url.URL{}
-			redirect.Scheme = "https"
+			redirect.Scheme = u.URL.Scheme
 			redirect.Host = u.URL.Host
 			redirect.RawQuery = r.URL.RawQuery
 			redirect.Path = "/.well-known/webfinger"
@@ -278,4 +300,32 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func dec(s string) ([]byte, error) {
 	s = strings.TrimSpace(s)
 	return base64.RawURLEncoding.DecodeString(s)
+}
+func splitHostPort(hostPort string) (host, port string) {
+	host = hostPort
+
+	colon := strings.LastIndexByte(host, ':')
+	if colon != -1 && validOptionalPort(host[colon:]) {
+		host, port = host[:colon], host[colon+1:]
+	}
+
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
+	}
+
+	return
+}
+func validOptionalPort(port string) bool {
+	if port == "" {
+		return true
+	}
+	if port[0] != ':' {
+		return false
+	}
+	for _, b := range port[1:] {
+		if b < '0' || b > '9' {
+			return false
+		}
+	}
+	return true
 }
