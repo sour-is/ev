@@ -41,7 +41,20 @@ type service struct {
 	m_api_lookup   syncint64.Counter
 	m_api_send     syncint64.Counter
 	m_req_time     syncint64.Histogram
+
+	opts []Option
 }
+
+type Option interface{
+	ApplySalty(*service)
+}
+
+type WithBaseURL string
+
+func (o WithBaseURL) ApplySalty(s *service) {
+	s.baseURL = string(o)
+}
+
 type contextKey struct {
 	name string
 }
@@ -54,7 +67,7 @@ type SaltyResolver interface {
 	IsResolver()
 }
 
-func New(ctx context.Context, es *ev.EventStore, baseURL string) (*service, error) {
+func New(ctx context.Context, es *ev.EventStore, opts ...Option) (*service, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
@@ -67,7 +80,17 @@ func New(ctx context.Context, es *ev.EventStore, baseURL string) (*service, erro
 
 	m := lg.Meter(ctx)
 
-	svc := &service{baseURL: baseURL, es: es, dns: net.DefaultResolver}
+	svc := &service{opts: opts, es: es, dns: net.DefaultResolver}
+
+	for _, o := range opts {
+		o.ApplySalty(svc)
+
+		if o, ok:=o.(interface{Setup(context.Context) error}); ok {
+			if err := o.Setup(ctx); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	var err, errs error
 	svc.m_create_user, err = m.SyncInt64().Counter("salty_create_user",
@@ -118,15 +141,33 @@ func (s *service) BaseURL() string {
 	return s.baseURL
 }
 
-func (s *service) RegisterHTTP(mux *http.ServeMux) {}
+func (s *service) RegisterHTTP(mux *http.ServeMux) {
+	for _, o := range s.opts {
+		if o, ok:=o.(interface{RegisterHTTP(mux *http.ServeMux)}); ok {
+			o.RegisterHTTP(mux)
+		}
+	}
+}
 func (s *service) RegisterAPIv1(mux *http.ServeMux) {
 	mux.HandleFunc("/ping", s.apiv1)
 	mux.HandleFunc("/register", s.apiv1)
 	mux.HandleFunc("/lookup/", s.apiv1)
 	mux.HandleFunc("/send", s.apiv1)
+
+	for _, o := range s.opts {
+		if o, ok:=o.(interface{RegisterAPIv1(mux *http.ServeMux)}); ok {
+			o.RegisterAPIv1(mux)
+		}
+	}
 }
 func (s *service) RegisterWellKnown(mux *http.ServeMux) {
 	mux.Handle("/salty/", lg.Htrace(s, "lookup"))
+
+	for _, o := range s.opts {
+		if o, ok:=o.(interface{RegisterWellKnown(mux *http.ServeMux)}); ok {
+			o.RegisterWellKnown(mux)
+		}
+	}
 }
 func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

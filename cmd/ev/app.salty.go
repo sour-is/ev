@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/sour-is/ev"
 	"github.com/sour-is/ev/app/salty"
@@ -29,13 +32,28 @@ var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error 
 		addr = ht.Addr
 	}
 
+	var opts []salty.Option
+
 	base, err := url.JoinPath(env.Default("SALTY_BASE_URL", "http://"+addr), "inbox")
 	if err != nil {
 		span.RecordError(err)
 		return err
 	}
+	opts = append(opts, salty.WithBaseURL(base))
 
-	salty, err := salty.New(ctx, eventstore, base)
+	if p := env.Default("SALTY_BLOB_DIR", ""); p != "" {
+		if strings.HasPrefix(p, "~/") {
+			home, _ := os.UserHomeDir()
+			p = filepath.Join(home, strings.TrimPrefix(p, "~/"))
+		}
+		opts = append(opts, salty.WithBlobStore(p))
+	}
+
+	salty, err := salty.New(
+		ctx,
+		eventstore,
+		opts...,
+	)
 	if err != nil {
 		span.RecordError(err)
 		return err

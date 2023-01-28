@@ -12,6 +12,7 @@ import (
 
 	"github.com/matryer/is"
 	"github.com/sour-is/ev/app/webfinger"
+	"github.com/sour-is/ev/pkg/service"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -29,15 +30,26 @@ func TestMain(m *testing.M) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	running := make(chan struct{})
+	apps.Register(99, func(ctx context.Context, s *service.Harness) error {
+		go func() {
+			<-s.OnRunning()
+			close(running)
+		}()
+
+		return nil
+	})
+
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
 		// Run application
-		if err := Run(ctx); err != nil {
+		if err := run(ctx); err != nil {
 			return err
 		}
 		return nil
 	})
 	wg.Go(func() error {
+		<-running
 		m.Run()
 		cancel()
 		return nil

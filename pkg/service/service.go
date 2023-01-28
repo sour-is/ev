@@ -25,8 +25,9 @@ type Harness struct {
 
 	Services []any
 
-	onStart []func(context.Context) error
-	onStop  []func(context.Context) error
+	onStart   []func(context.Context) error
+	onRunning chan struct{}
+	onStop    []func(context.Context) error
 }
 
 func (s *Harness) Setup(ctx context.Context, apps ...application) error {
@@ -36,6 +37,7 @@ func (s *Harness) Setup(ctx context.Context, apps ...application) error {
 	// setup crontab
 	c := cron.New(cron.DefaultGranularity)
 	s.OnStart(c.Run)
+	s.onRunning = make(chan struct{})
 	s.crontab = c
 
 	var err error
@@ -48,6 +50,9 @@ func (s *Harness) Setup(ctx context.Context, apps ...application) error {
 }
 func (s *Harness) OnStart(fn func(context.Context) error) {
 	s.onStart = append(s.onStart, fn)
+}
+func (s *Harness) OnRunning() <-chan struct{} {
+	return s.onRunning
 }
 func (s *Harness) OnStop(fn func(context.Context) error) {
 	s.onStop = append(s.onStop, fn)
@@ -102,7 +107,11 @@ func (s *Harness) Run(ctx context.Context, appName, version string) error {
 		g.Go(func() error { return fn(ctx) })
 	}
 
-	return g.Wait()
+	close(s.onRunning)
+
+	err := g.Wait()
+
+	return err
 }
 
 type application func(context.Context, *Harness) error // Len is the number of elements in the collection.

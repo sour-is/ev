@@ -21,12 +21,12 @@ func main() {
 		<-ctx.Done()
 		defer cancel() // restore interrupt function
 	}()
-	if err := Run(ctx); err != nil {
+	if err := run(ctx); err != nil {
 		log.Fatal(err)
 		os.Exit(1)
 	}
 }
-func Run(ctx context.Context) error {
+func run(ctx context.Context) error {
 	svc := &service.Harness{}
 	ctx, stop := lg.Init(ctx, appName)
 	svc.OnStop(stop)
