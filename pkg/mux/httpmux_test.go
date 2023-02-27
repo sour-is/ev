@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev/pkg/mux"
+	"go.sour.is/ev/pkg/mux"
 )
 
 type mockHTTP struct {

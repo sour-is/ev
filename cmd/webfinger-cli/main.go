@@ -18,8 +18,8 @@ import (
 	"github.com/docopt/docopt-go"
 	"gopkg.in/yaml.v3"
 
-	"github.com/sour-is/ev/app/webfinger"
-	"github.com/sour-is/ev/cmd/webfinger-cli/xdg"
+	"go.sour.is/ev/app/webfinger"
+	"go.sour.is/ev/cmd/webfinger-cli/xdg"
 )
 
 var usage = `Webfinger CLI.

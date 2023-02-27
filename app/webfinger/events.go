@@ -3,7 +3,7 @@ package webfinger
 import (
 	"encoding/json"
 
-	"github.com/sour-is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/es/event"
 )
 
 type SubjectSet struct {
@@ -35,7 +35,7 @@ func (e *SubjectSet) UnmarshalBinary(b []byte) error {
 var _ event.Event = (*SubjectSet)(nil)
 
 type SubjectDeleted struct {
-	Subject    string             `json:"subject"`
+	Subject string `json:"subject"`
 
 	eventMeta event.Meta
 }

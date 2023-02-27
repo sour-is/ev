@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/sour-is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/es/event"
 )
 
 type Agg struct {

@@ -19,9 +19,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/ravilushqa/otelgqlgen"
 
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/gql/graphiql"
-	"github.com/sour-is/ev/pkg/gql/playground"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/gql/graphiql"
+	"go.sour.is/ev/pkg/gql/playground"
 )
 
 type BaseResolver interface {

@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev/app/webfinger"
-	"github.com/sour-is/ev/pkg/service"
+	"go.sour.is/ev/app/webfinger"
+	"go.sour.is/ev/pkg/service"
 	"golang.org/x/sync/errgroup"
 )
 

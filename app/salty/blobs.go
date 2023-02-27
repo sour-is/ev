@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/authreq"
 	"go.opentelemetry.io/otel/metric/instrument"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/authreq"
 	"go.uber.org/multierr"
 )
 

@@ -1,4 +1,4 @@
-module github.com/sour-is/ev
+module go.sour.is/ev
 
 go 1.19
 

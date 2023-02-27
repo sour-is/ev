@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/oklog/ulid"
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/set"
+	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/set"
 )
 
 type Request struct {

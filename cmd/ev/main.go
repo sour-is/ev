@@ -8,8 +8,8 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/service"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/service"
 )
 
 var apps service.Apps

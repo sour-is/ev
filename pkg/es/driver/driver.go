@@ -4,7 +4,7 @@ package driver
 import (
 	"context"
 
-	"github.com/sour-is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/es/event"
 )
 
 type Driver interface {

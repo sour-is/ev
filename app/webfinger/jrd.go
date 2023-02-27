@@ -8,9 +8,9 @@ import (
 	"hash/fnv"
 	"sort"
 
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/set"
-	"github.com/sour-is/ev/pkg/slice"
+	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/set"
+	"go.sour.is/ev/pkg/slice"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,14 +34,14 @@ type JRD struct {
 
 func (a *JRD) CloneValues() *JRD {
 	m := make(map[string]*string, len(a.Properties))
-	for k,v := range a.Properties {
+	for k, v := range a.Properties {
 		m[k] = v
 	}
 	return &JRD{
-		Subject:       a.Subject,
-		Aliases:       append([]string{}, a.Aliases...),
-		Properties:    m,
-		Links:         append([]*Link{}, a.Links...),
+		Subject:    a.Subject,
+		Aliases:    append([]string{}, a.Aliases...),
+		Properties: m,
+		Links:      append([]*Link{}, a.Links...),
 	}
 }
 

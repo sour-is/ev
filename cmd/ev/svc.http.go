@@ -7,17 +7,15 @@ import (
 	"strings"
 
 	"github.com/rs/cors"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/env"
-	"github.com/sour-is/ev/pkg/mux"
-	"github.com/sour-is/ev/pkg/service"
-	"github.com/sour-is/ev/pkg/slice"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/env"
+	"go.sour.is/ev/pkg/mux"
+	"go.sour.is/ev/pkg/service"
+	"go.sour.is/ev/pkg/slice"
 )
 
 var _ = apps.Register(20, func(ctx context.Context, svc *service.Harness) error {
-	s := &http.Server{
-		
-	}
+	s := &http.Server{}
 	svc.Add(s)
 
 	mux := mux.New()

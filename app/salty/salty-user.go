@@ -12,8 +12,8 @@ import (
 	"github.com/keys-pub/keys"
 	"github.com/oklog/ulid/v2"
 
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/gql"
+	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/gql"
 )
 
 type SaltyUser struct {

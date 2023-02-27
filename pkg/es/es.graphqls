@@ -1,5 +1,5 @@
 
-type Meta @goModel(model: "github.com/sour-is/ev/pkg/es/event.Meta") {
+type Meta @goModel(model: "go.sour.is/ev/pkg/es/event.Meta") {
     eventID: String! @goField(name: "getEventID")
     streamID: String! @goField(name: "ActualStreamID")
     position: Int! @goField(name: "ActualPosition")
@@ -17,7 +17,7 @@ extend type Subscription {
     eventAdded(streamID: String! after: Int! = -1): Event
 }
 
-type Event implements Edge @goModel(model: "github.com/sour-is/ev/pkg/es.GQLEvent") {
+type Event implements Edge @goModel(model: "go.sour.is/ev/pkg/es.GQLEvent") {
     id: ID!
 
     eventID: String!

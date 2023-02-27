@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sour-is/ev/pkg/math"
+	"go.sour.is/ev/pkg/math"
 )
 
 type Set[T comparable] map[T]struct{}
@@ -36,7 +36,7 @@ func (s Set[T]) Delete(items ...T) Set[T] {
 
 func (s Set[T]) Equal(e Set[T]) bool {
 	for k := range s {
-		if _, ok := e[k]; !ok{
+		if _, ok := e[k]; !ok {
 			return false
 		}
 	}

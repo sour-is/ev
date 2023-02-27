@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev/pkg/cache"
+	"go.sour.is/ev/pkg/cache"
 )
 
 func TestCache(t *testing.T) {

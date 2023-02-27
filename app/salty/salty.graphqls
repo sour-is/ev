@@ -6,7 +6,7 @@ extend type Mutation {
     createSaltyUser(nick: String! pubkey: String!): SaltyUser
 }
 
-type SaltyUser @goModel(model: "github.com/sour-is/ev/app/salty.SaltyUser"){
+type SaltyUser @goModel(model: "go.sour.is/ev/app/salty.SaltyUser"){
     pubkey:   String!
     inbox:    String!
     endpoint: String!

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev/pkg/authreq"
+	"go.sour.is/ev/pkg/authreq"
 )
 
 func TestGETRequest(t *testing.T) {

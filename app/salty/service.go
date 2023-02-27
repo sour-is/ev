@@ -19,10 +19,10 @@ import (
 	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/multierr"
 
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/gql"
+	"go.sour.is/ev"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/gql"
 )
 
 type DNSResolver interface {
@@ -45,7 +45,7 @@ type service struct {
 	opts []Option
 }
 
-type Option interface{
+type Option interface {
 	ApplySalty(*service)
 }
 
@@ -85,7 +85,7 @@ func New(ctx context.Context, es *ev.EventStore, opts ...Option) (*service, erro
 	for _, o := range opts {
 		o.ApplySalty(svc)
 
-		if o, ok:=o.(interface{Setup(context.Context) error}); ok {
+		if o, ok := o.(interface{ Setup(context.Context) error }); ok {
 			if err := o.Setup(ctx); err != nil {
 				return nil, err
 			}
@@ -143,7 +143,7 @@ func (s *service) BaseURL() string {
 
 func (s *service) RegisterHTTP(mux *http.ServeMux) {
 	for _, o := range s.opts {
-		if o, ok:=o.(interface{RegisterHTTP(mux *http.ServeMux)}); ok {
+		if o, ok := o.(interface{ RegisterHTTP(mux *http.ServeMux) }); ok {
 			o.RegisterHTTP(mux)
 		}
 	}
@@ -155,7 +155,7 @@ func (s *service) RegisterAPIv1(mux *http.ServeMux) {
 	mux.HandleFunc("/send", s.apiv1)
 
 	for _, o := range s.opts {
-		if o, ok:=o.(interface{RegisterAPIv1(mux *http.ServeMux)}); ok {
+		if o, ok := o.(interface{ RegisterAPIv1(mux *http.ServeMux) }); ok {
 			o.RegisterAPIv1(mux)
 		}
 	}
@@ -164,7 +164,7 @@ func (s *service) RegisterWellKnown(mux *http.ServeMux) {
 	mux.Handle("/salty/", lg.Htrace(s, "lookup"))
 
 	for _, o := range s.opts {
-		if o, ok:=o.(interface{RegisterWellKnown(mux *http.ServeMux)}); ok {
+		if o, ok := o.(interface{ RegisterWellKnown(mux *http.ServeMux) }); ok {
 			o.RegisterWellKnown(mux)
 		}
 	}

@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/app/msgbus"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/service"
-	"github.com/sour-is/ev/pkg/slice"
+	"go.sour.is/ev"
+	"go.sour.is/ev/app/msgbus"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/service"
+	"go.sour.is/ev/pkg/slice"
 )
 
 var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error {

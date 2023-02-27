@@ -14,12 +14,12 @@ import (
 	"github.com/matryer/is"
 	"go.uber.org/multierr"
 
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/app/webfinger"
-	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
-	"github.com/sour-is/ev/pkg/es/driver/projecter"
-	"github.com/sour-is/ev/pkg/es/driver/streamer"
-	"github.com/sour-is/ev/pkg/es/event"
+	"go.sour.is/ev"
+	"go.sour.is/ev/app/webfinger"
+	memstore "go.sour.is/ev/pkg/es/driver/mem-store"
+	"go.sour.is/ev/pkg/es/driver/projecter"
+	"go.sour.is/ev/pkg/es/driver/streamer"
+	"go.sour.is/ev/pkg/es/event"
 )
 
 func TestParseJRD(t *testing.T) {

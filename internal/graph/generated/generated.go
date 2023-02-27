@@ -16,11 +16,11 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
 	"github.com/99designs/gqlgen/plugin/federation/fedruntime"
-	"github.com/sour-is/ev/app/msgbus"
-	"github.com/sour-is/ev/app/salty"
-	"github.com/sour-is/ev/pkg/es"
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/gql"
+	"go.sour.is/ev/app/msgbus"
+	"go.sour.is/ev/app/salty"
+	"go.sour.is/ev/pkg/es"
+	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/gql"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
@@ -530,7 +530,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 
 var sources = []*ast.Source{
 	{Name: "../../../pkg/es/es.graphqls", Input: `
-type Meta @goModel(model: "github.com/sour-is/ev/pkg/es/event.Meta") {
+type Meta @goModel(model: "go.sour.is/ev/pkg/es/event.Meta") {
     eventID: String! @goField(name: "getEventID")
     streamID: String! @goField(name: "ActualStreamID")
     position: Int! @goField(name: "ActualPosition")
@@ -548,7 +548,7 @@ extend type Subscription {
     eventAdded(streamID: String! after: Int! = -1): Event
 }
 
-type Event implements Edge @goModel(model: "github.com/sour-is/ev/pkg/es.GQLEvent") {
+type Event implements Edge @goModel(model: "go.sour.is/ev/pkg/es.GQLEvent") {
     id: ID!
 
     eventID: String!
@@ -566,23 +566,23 @@ type Event implements Edge @goModel(model: "github.com/sour-is/ev/pkg/es.GQLEven
 	{Name: "../../../pkg/gql/common.graphqls", Input: `scalar Time
 scalar Map
 
-type Connection @goModel(model: "github.com/sour-is/ev/pkg/gql.Connection") {
+type Connection @goModel(model: "go.sour.is/ev/pkg/gql.Connection") {
     paging: PageInfo!
     edges: [Edge!]!
 }
-input PageInput  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInput") {
+input PageInput  @goModel(model: "go.sour.is/ev/pkg/gql.PageInput") {
     after:  Int = 0
     before: Int
     count:  Int = 30
 }
-type PageInfo  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInfo") {
+type PageInfo  @goModel(model: "go.sour.is/ev/pkg/gql.PageInfo") {
     next: Boolean!
     prev: Boolean!
 
     begin: Int!
     end:   Int!
 }
-interface Edge @goModel(model: "github.com/sour-is/ev/pkg/gql.Edge"){
+interface Edge @goModel(model: "go.sour.is/ev/pkg/gql.Edge"){
     id: ID!
 }
 
@@ -615,7 +615,7 @@ extend type Subscription {
     """after == 0 start from begining, after == -1 start from end"""
     postAdded(streamID: String! after: Int! = -1): PostEvent
 }
-type PostEvent implements Edge @goModel(model: "github.com/sour-is/ev/app/msgbus.PostEvent") {
+type PostEvent implements Edge @goModel(model: "go.sour.is/ev/app/msgbus.PostEvent") {
     id: ID!
 
     payload: String!
@@ -632,7 +632,7 @@ extend type Mutation {
     createSaltyUser(nick: String! pubkey: String!): SaltyUser
 }
 
-type SaltyUser @goModel(model: "github.com/sour-is/ev/app/salty.SaltyUser"){
+type SaltyUser @goModel(model: "go.sour.is/ev/app/salty.SaltyUser"){
     pubkey:   String!
     inbox:    String!
     endpoint: String!

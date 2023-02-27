@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/keys-pub/keys/json"
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/set"
+	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/set"
 )
 
 type Time time.Time

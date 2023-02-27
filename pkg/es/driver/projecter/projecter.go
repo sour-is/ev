@@ -5,10 +5,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es/driver"
-	"github.com/sour-is/ev/pkg/es/event"
+	"go.sour.is/ev"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/es/driver"
+	"go.sour.is/ev/pkg/es/event"
 )
 
 type projector struct {

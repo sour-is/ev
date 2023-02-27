@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/cron"
 	"go.opentelemetry.io/otel/attribute"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/cron"
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 )

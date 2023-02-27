@@ -11,13 +11,13 @@ import (
 	"github.com/matryer/is"
 	"go.uber.org/multierr"
 
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/app/peerfinder"
-	memstore "github.com/sour-is/ev/pkg/es/driver/mem-store"
-	"github.com/sour-is/ev/pkg/es/driver/projecter"
-	resolvelinks "github.com/sour-is/ev/pkg/es/driver/resolve-links"
-	"github.com/sour-is/ev/pkg/es/driver/streamer"
-	"github.com/sour-is/ev/pkg/es/event"
+	"go.sour.is/ev"
+	"go.sour.is/ev/app/peerfinder"
+	memstore "go.sour.is/ev/pkg/es/driver/mem-store"
+	"go.sour.is/ev/pkg/es/driver/projecter"
+	resolvelinks "go.sour.is/ev/pkg/es/driver/resolve-links"
+	"go.sour.is/ev/pkg/es/driver/streamer"
+	"go.sour.is/ev/pkg/es/event"
 )
 
 var (

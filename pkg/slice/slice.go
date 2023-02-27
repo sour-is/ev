@@ -1,7 +1,7 @@
 package slice
 
 import (
-	"github.com/sour-is/ev/pkg/math"
+	"go.sour.is/ev/pkg/math"
 )
 
 // FilterType returns a subset that matches the type.

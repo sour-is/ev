@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/sour-is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/es/event"
 )
 
 type Edge interface {

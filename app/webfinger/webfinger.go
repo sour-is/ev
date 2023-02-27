@@ -13,10 +13,10 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/set"
+	"go.sour.is/ev"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/set"
 )
 
 type service struct {

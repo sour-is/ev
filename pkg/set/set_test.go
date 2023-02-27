@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev/pkg/set"
+	"go.sour.is/ev/pkg/set"
 )
 
 func TestStringSet(t *testing.T) {

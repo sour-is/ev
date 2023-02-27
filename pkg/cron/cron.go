@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/locker"
-	"github.com/sour-is/ev/pkg/set"
 	"go.opentelemetry.io/otel/attribute"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/locker"
+	"go.sour.is/ev/pkg/set"
 	"golang.org/x/sync/errgroup"
 )
 

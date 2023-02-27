@@ -1,23 +1,23 @@
 scalar Time
 scalar Map
 
-type Connection @goModel(model: "github.com/sour-is/ev/pkg/gql.Connection") {
+type Connection @goModel(model: "go.sour.is/ev/pkg/gql.Connection") {
     paging: PageInfo!
     edges: [Edge!]!
 }
-input PageInput  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInput") {
+input PageInput  @goModel(model: "go.sour.is/ev/pkg/gql.PageInput") {
     after:  Int = 0
     before: Int
     count:  Int = 30
 }
-type PageInfo  @goModel(model: "github.com/sour-is/ev/pkg/gql.PageInfo") {
+type PageInfo  @goModel(model: "go.sour.is/ev/pkg/gql.PageInfo") {
     next: Boolean!
     prev: Boolean!
 
     begin: Int!
     end:   Int!
 }
-interface Edge @goModel(model: "github.com/sour-is/ev/pkg/gql.Edge"){
+interface Edge @goModel(model: "go.sour.is/ev/pkg/gql.Edge"){
     id: ID!
 }
 

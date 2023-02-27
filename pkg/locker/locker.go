@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sour-is/ev/internal/lg"
 	"go.opentelemetry.io/otel/attribute"
+	"go.sour.is/ev/internal/lg"
 )
 
 type Locked[T any] struct {

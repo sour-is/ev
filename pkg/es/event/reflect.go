@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/locker"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/locker"
 )
 
 type config struct {

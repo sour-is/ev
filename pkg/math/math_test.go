@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/pkg/math"
+	"go.sour.is/ev"
+	"go.sour.is/ev/pkg/math"
 )
 
 func TestMath(t *testing.T) {

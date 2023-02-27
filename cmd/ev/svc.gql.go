@@ -4,12 +4,12 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sour-is/ev/app/gql"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/gql/resolver"
-	"github.com/sour-is/ev/pkg/mux"
-	"github.com/sour-is/ev/pkg/service"
-	"github.com/sour-is/ev/pkg/slice"
+	"go.sour.is/ev/app/gql"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/gql/resolver"
+	"go.sour.is/ev/pkg/mux"
+	"go.sour.is/ev/pkg/service"
+	"go.sour.is/ev/pkg/slice"
 )
 
 var _ = apps.Register(90, func(ctx context.Context, svc *service.Harness) error {

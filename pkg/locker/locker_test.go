@@ -6,7 +6,7 @@ import (
 
 	"github.com/matryer/is"
 
-	"github.com/sour-is/ev/pkg/locker"
+	"go.sour.is/ev/pkg/locker"
 )
 
 type config struct {

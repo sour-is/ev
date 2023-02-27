@@ -4,12 +4,12 @@ import (
 	"context"
 
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/sour-is/ev/app/msgbus"
-	"github.com/sour-is/ev/app/salty"
-	"github.com/sour-is/ev/internal/graph/generated"
-	"github.com/sour-is/ev/pkg/es"
-	"github.com/sour-is/ev/pkg/gql"
-	"github.com/sour-is/ev/pkg/gql/resolver"
+	"go.sour.is/ev/app/msgbus"
+	"go.sour.is/ev/app/salty"
+	"go.sour.is/ev/internal/graph/generated"
+	"go.sour.is/ev/pkg/es"
+	"go.sour.is/ev/pkg/gql"
+	"go.sour.is/ev/pkg/gql/resolver"
 )
 
 type Resolver struct {

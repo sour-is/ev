@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/matryer/is"
-	"github.com/sour-is/ev/pkg/slice"
+	"go.sour.is/ev/pkg/slice"
 )
 
 func TestAlign(t *testing.T) {
@@ -27,8 +27,8 @@ func TestAlign(t *testing.T) {
 		},
 
 		{
-			left: []string{"2", "3", "4"},
-			right:  []string{"1", "3", "5"},
+			left:  []string{"2", "3", "4"},
+			right: []string{"1", "3", "5"},
 			combined: []slice.Pair[*string, *string]{
 				{nil, ptr("1")},
 				{ptr("2"), nil},
@@ -37,7 +37,6 @@ func TestAlign(t *testing.T) {
 				{nil, ptr("5")},
 			},
 		},
-
 	}
 
 	is := is.New(t)

@@ -17,10 +17,10 @@ import (
 	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/multierr"
 
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es/event"
-	"github.com/sour-is/ev/pkg/gql"
+	"go.sour.is/ev"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/gql"
 )
 
 type service struct {

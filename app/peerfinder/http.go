@@ -19,9 +19,9 @@ import (
 	contentnegotiation "gitlab.com/jamietanna/content-negotiation-go"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/sour-is/ev"
-	"github.com/sour-is/ev/internal/lg"
-	"github.com/sour-is/ev/pkg/es/event"
+	"go.sour.is/ev"
+	"go.sour.is/ev/internal/lg"
+	"go.sour.is/ev/pkg/es/event"
 )
 
 var (
