@@ -90,6 +90,9 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		case strings.HasPrefix(r.URL.Path, "/peers/status"):
 			s.state.Modify(r.Context(), func(ctx context.Context, state *state) error {
+				for id, p := range state.peers {
+					fmt.Fprintln(w, "PEER: ", id[24:], " ", p.Owner)
+				}
 
 				for id, rq := range state.requests {
 					fmt.Fprintln(w, "REQ: ", id, rq.RequestIP, len(rq.Responses))
