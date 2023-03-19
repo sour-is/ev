@@ -29,7 +29,6 @@ require github.com/patrickmn/go-cache v2.1.0+incompatible
 require (
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/taigrr/go-colorhash v0.0.0-20220329080504-742db7f45eae // indirect
-	golang.org/dl v0.0.0-20230112164944-626922ede476 // indirect
 )
 
 require (

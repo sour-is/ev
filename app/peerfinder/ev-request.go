@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/netip"
 	"strconv"
 	"time"
@@ -107,7 +106,10 @@ func (lis ListResponse) Len() int {
 	return len(lis)
 }
 func (lis ListResponse) Less(i, j int) bool {
-	if diff := math.Abs(lis[i].Latency - 0.0); diff < 0.0001 {
+	if lis[j].Latency == 0.0 && lis[i].Latency > 0.0 {
+		return true
+	}
+	if lis[i].Latency == 0.0 && lis[j].Latency > 0.0 {
 		return false
 	}
 

@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/fs"
 	"log"
-	"math"
 	"net"
 	"net/http"
 	"sort"
@@ -91,20 +90,53 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case strings.HasPrefix(r.URL.Path, "/peers/status"):
+			var pickID string
+			if strings.HasPrefix(r.URL.Path, "/peers/status/") {
+				pickID = strings.TrimPrefix(r.URL.Path, "/peers/status/")
+			}
+
+			var requests []*Request
+
 			s.state.Modify(r.Context(), func(ctx context.Context, state *state) error {
 				for id, p := range state.peers {
 					fmt.Fprintln(w, "PEER:", id[24:], p.Owner, p.Name)
 				}
 
-				for id, rq := range state.requests {
-					fmt.Fprintln(w, "REQ: ", id, rq.RequestIP, len(rq.Responses))
-					for id, r := range rq.Responses {
-						fmt.Fprintln(w, "  RES: ", id, r.PeerID[24:], r.Latency, r.Jitter)
+				if pickID != "" {
+					if rq, ok := state.requests[pickID]; ok {
+						requests = append(requests, rq)
+					}
+				} else {
+					requests = make([]*Request, 0, len(state.requests))
+					for i := range state.requests {
+						rq := state.requests[i]
+						requests = append(requests, rq)
+					}
+				}
+
+				for i := range requests {
+					rq := requests[i]
+					for i := range rq.Responses {
+						res := rq.Responses[i]
+						if peer, ok := state.peers[res.PeerID]; ok {
+							res.Peer = peer
+							res.Peer.ID = ""
+						}
 					}
 				}
 
 				return nil
 			})
+
+			for i, rq := range requests {
+				fmt.Fprintln(w, "REQ: ", i, rq.RequestIP, len(rq.Responses))
+				for i, peer := range fnOrderByPeer(rq) {
+					fmt.Fprintln(w, "  PEER: ", i, peer.RequestID, peer.Name, peer.Latency, peer.Jitter)
+					for i, res := range peer.Results {
+						fmt.Fprintln(w, "    RES: ", i, res.RequestID, res.Latency, res.Jitter)
+					}
+				}
+			}
 
 		default:
 			s.getResults(w, r)
@@ -531,19 +563,21 @@ var funcMap = map[string]any{
 }
 
 type peerResult struct {
-	Name    string
-	Country string
-	Latency float64
-	Jitter  float64
+	RequestID string
+	Name      string
+	Country   string
+	Latency   float64
+	Jitter    float64
 }
 type peer struct {
-	Name     string
-	Note     string
-	Nick     string
-	Country  string
-	Latency  float64
-	Jitter   float64
-	VPNTypes []string
+	RequestID string
+	Name      string
+	Note      string
+	Nick      string
+	Country   string
+	Latency   float64
+	Jitter    float64
+	VPNTypes  []string
 
 	Results peerResults
 }
@@ -553,10 +587,14 @@ func (lis listPeer) Len() int {
 	return len(lis)
 }
 func (lis listPeer) Less(i, j int) bool {
-	if diff := math.Abs(lis[i].Latency - 0.0); diff < 0.0001 {
+	if lis[j].Latency == 0.0 && lis[i].Latency > 0.0 {
+		return true
+	}
+	if lis[i].Latency == 0.0 && lis[j].Latency > 0.0 {
 		return false
 	}
-	return lis[j].Latency >= lis[i].Latency
+
+	return lis[i].Latency < lis[j].Latency
 }
 func (lis listPeer) Swap(i, j int) {
 	lis[i], lis[j] = lis[j], lis[i]
@@ -568,24 +606,31 @@ func (lis peerResults) Len() int {
 	return len(lis)
 }
 func (lis peerResults) Less(i, j int) bool {
-	if diff := math.Abs(lis[i].Latency - 0.0); diff < 0.0001 {
+	if lis[j].Latency == 0.0 && lis[i].Latency > 0.0 {
+		return true
+	}
+	if lis[i].Latency == 0.0 && lis[j].Latency > 0.0 {
 		return false
 	}
-	return lis[j].Latency >= lis[i].Latency
+
+	return lis[i].Latency < lis[j].Latency
 }
 func (lis peerResults) Swap(i, j int) {
 	lis[i], lis[j] = lis[j], lis[i]
 }
 
-func fnOrderByPeer(rq *Request) any {
-
+func fnOrderByPeer(rq *Request) listPeer {
 	peers := make(map[string]peer)
-
 	for i := range rq.Responses {
+		if rq.Responses[i] == nil || rq.Responses[i].Peer == nil {
+			continue
+		}
 		rs := rq.Responses[i]
+
 		p, ok := peers[rs.Peer.Owner]
 
 		if !ok {
+			p.RequestID = rq.RequestID
 			p.Country = rs.Peer.Country
 			p.Name = rs.Peer.Name
 			p.Nick = rs.Peer.Nick
@@ -596,10 +641,11 @@ func fnOrderByPeer(rq *Request) any {
 		}
 
 		p.Results = append(p.Results, peerResult{
-			Name:    rs.Peer.Name,
-			Country: rs.Peer.Country,
-			Latency: rs.Latency,
-			Jitter:  rs.Jitter,
+			RequestID: rq.RequestID,
+			Name:      rs.Peer.Name,
+			Country:   rs.Peer.Country,
+			Latency:   rs.Latency,
+			Jitter:    rs.Jitter,
 		})
 
 		peers[rs.Peer.Owner] = p
@@ -617,7 +663,6 @@ func fnOrderByPeer(rq *Request) any {
 	}
 
 	sort.Sort(peerList)
-
 	return peerList
 }
 func fnCountResponses(rq *Request) int {
