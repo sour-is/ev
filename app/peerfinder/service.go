@@ -63,7 +63,7 @@ func (s *service) loadResult(ctx context.Context, request *Request) (*Request, e
 		return request, nil
 	}
 
-	return request, s.state.Modify(ctx, func(ctx context.Context, t *state) error {
+	return request, s.state.Use(ctx, func(ctx context.Context, t *state) error {
 
 		for i := range request.Responses {
 			res := request.Responses[i]
@@ -116,7 +116,7 @@ func (s *service) Run(ctx context.Context) (err error) {
 			}
 		}
 
-		s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+		s.state.Use(ctx, func(ctx context.Context, state *state) error {
 			return state.ApplyEvents(events)
 		})
 		events = events[:0]

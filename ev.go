@@ -54,7 +54,7 @@ func Register(ctx context.Context, name string, d driver.Driver) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
-	return drivers.Modify(ctx, func(ctx context.Context, c *config) error {
+	return drivers.Use(ctx, func(ctx context.Context, c *config) error {
 		if _, set := c.drivers[name]; set {
 			return fmt.Errorf("driver %s already set", name)
 		}

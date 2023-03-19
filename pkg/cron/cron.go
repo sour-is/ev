@@ -74,7 +74,7 @@ func (c *cron) NewCron(expr string, task func(context.Context, time.Time) error)
 	c.jobs = append(c.jobs, job)
 }
 func (c *cron) RunOnce(ctx context.Context, once func(context.Context, time.Time) error) {
-	c.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	c.state.Use(ctx, func(ctx context.Context, state *state) error {
 		state.queue = append(state.queue, once)
 		return nil
 	})
@@ -126,7 +126,7 @@ func (c *cron) run(ctx context.Context, now time.Time) {
 	span.AddEvent("Cron Run: " + now.Format(time.RFC822))
 	// fmt.Println("Cron Run: ", now.Format(time.RFC822))
 
-	c.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	c.state.Use(ctx, func(ctx context.Context, state *state) error {
 		run = append(run, state.queue...)
 		state.queue = state.queue[:0]
 

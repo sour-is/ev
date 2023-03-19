@@ -100,7 +100,7 @@ func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error)
 		ctx, span := lg.Span(ctx)
 		defer span.End()
 
-		l.Modify(ctx, func(ctx context.Context, w *wal.Log) error {
+		l.Use(ctx, func(ctx context.Context, w *wal.Log) error {
 			ctx, span := lg.Span(ctx)
 			defer span.End()
 
@@ -139,7 +139,7 @@ func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.Event
 
 	el := &eventLog{streamID: streamID, diskStore: d}
 
-	return el, d.openlogs.Modify(ctx, func(ctx context.Context, openlogs *openlogs) error {
+	return el, d.openlogs.Use(ctx, func(ctx context.Context, openlogs *openlogs) error {
 		ctx, span := lg.Span(ctx)
 		defer span.End()
 
@@ -193,7 +193,7 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 	event.SetStreamID(e.streamID, events...)
 
 	var count uint64
-	err := e.events.Modify(ctx, func(ctx context.Context, l *wal.Log) error {
+	err := e.events.Use(ctx, func(ctx context.Context, l *wal.Log) error {
 		ctx, span := lg.Span(ctx)
 		defer span.End()
 
@@ -248,7 +248,7 @@ func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, 
 
 	var events event.Events
 
-	err := e.events.Modify(ctx, func(ctx context.Context, stream *wal.Log) error {
+	err := e.events.Use(ctx, func(ctx context.Context, stream *wal.Log) error {
 		ctx, span := lg.Span(ctx)
 		defer span.End()
 
@@ -330,7 +330,7 @@ func (e *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, er
 	)
 
 	var events event.Events
-	err := e.events.Modify(ctx, func(ctx context.Context, stream *wal.Log) error {
+	err := e.events.Use(ctx, func(ctx context.Context, stream *wal.Log) error {
 		var err error
 
 		events, err = readStreamN(ctx, stream, index...)
@@ -352,7 +352,7 @@ func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	var idx uint64
 	var err error
 
-	err = e.events.Modify(ctx, func(ctx context.Context, events *wal.Log) error {
+	err = e.events.Use(ctx, func(ctx context.Context, events *wal.Log) error {
 		idx, err = events.FirstIndex()
 		return err
 	})
@@ -371,7 +371,7 @@ func (e *eventLog) LastIndex(ctx context.Context) (uint64, error) {
 	var idx uint64
 	var err error
 
-	err = e.events.Modify(ctx, func(ctx context.Context, events *wal.Log) error {
+	err = e.events.Use(ctx, func(ctx context.Context, events *wal.Log) error {
 		idx, err = events.LastIndex()
 		return err
 	})
@@ -391,7 +391,7 @@ func (e *eventLog) Truncate(ctx context.Context, index int64) error {
 	if index == 0 {
 		return nil
 	}
-	return e.events.Modify(ctx, func(ctx context.Context, events *wal.Log) error {
+	return e.events.Use(ctx, func(ctx context.Context, events *wal.Log) error {
 		if index < 0 {
 			return events.TruncateBack(uint64(-index))
 		}

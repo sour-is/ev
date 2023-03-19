@@ -97,7 +97,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			var requests []*Request
 
-			s.state.Modify(r.Context(), func(ctx context.Context, state *state) error {
+			s.state.Use(r.Context(), func(ctx context.Context, state *state) error {
 				for id, p := range state.peers {
 					fmt.Fprintln(w, "PEER:", id[24:], p.Owner, p.Name)
 				}
@@ -170,7 +170,7 @@ func (s *service) getPending(w http.ResponseWriter, r *http.Request, peerID stri
 	)
 
 	var peer *Peer
-	err := s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	err := s.state.Use(ctx, func(ctx context.Context, state *state) error {
 		var ok bool
 		if peer, ok = state.peers[peerID]; !ok {
 			return fmt.Errorf("peer not found: %s", peerID)
@@ -285,7 +285,7 @@ func (s *service) getResults(w http.ResponseWriter, r *http.Request) {
 	// }
 
 	var requests ListRequest
-	s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	s.state.Use(ctx, func(ctx context.Context, state *state) error {
 		requests = make([]*Request, 0, len(state.requests))
 
 		for _, req := range state.requests {
@@ -306,7 +306,7 @@ func (s *service) getResults(w http.ResponseWriter, r *http.Request) {
 	args := requestArgs(r)
 	args.Requests = requests[:maxResults]
 
-	s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	s.state.Use(ctx, func(ctx context.Context, state *state) error {
 		args.CountPeers = len(state.peers)
 		return nil
 	})
@@ -323,7 +323,7 @@ func (s *service) getResultsForRequest(w http.ResponseWriter, r *http.Request, u
 	)
 
 	var request *Request
-	err := s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	err := s.state.Use(ctx, func(ctx context.Context, state *state) error {
 		request = state.requests[uuid]
 
 		return nil
@@ -430,7 +430,7 @@ func (s *service) postResult(w http.ResponseWriter, r *http.Request, reqID strin
 
 	peerID := r.Form.Get("peer_id")
 
-	err := s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	err := s.state.Use(ctx, func(ctx context.Context, state *state) error {
 		var ok bool
 		if _, ok = state.peers[peerID]; !ok {
 			log.Printf("peer not found: %s\n", peerID)

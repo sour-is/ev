@@ -49,7 +49,7 @@ func (m *memstore) EventLog(ctx context.Context, streamID string) (driver.EventL
 
 	el := &eventLog{streamID: streamID}
 
-	err := m.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	err := m.state.Use(ctx, func(ctx context.Context, state *state) error {
 		_, span := lg.Span(ctx)
 		defer span.End()
 
@@ -76,7 +76,7 @@ func (m *eventLog) Append(ctx context.Context, events event.Events, version uint
 
 	event.SetStreamID(m.streamID, events...)
 
-	return uint64(len(events)), m.events.Modify(ctx, func(ctx context.Context, stream *event.Events) error {
+	return uint64(len(events)), m.events.Use(ctx, func(ctx context.Context, stream *event.Events) error {
 		ctx, span := lg.Span(ctx)
 		defer span.End()
 
@@ -117,7 +117,7 @@ func (m *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, er
 	defer span.End()
 
 	var events event.Events
-	err := m.events.Modify(ctx, func(ctx context.Context, stream *event.Events) error {
+	err := m.events.Use(ctx, func(ctx context.Context, stream *event.Events) error {
 		var err error
 
 		events, err = readStreamN(ctx, stream, index...)
@@ -135,7 +135,7 @@ func (m *eventLog) Read(ctx context.Context, after int64, count int64) (event.Ev
 
 	var events event.Events
 
-	err := m.events.Modify(ctx, func(ctx context.Context, stream *event.Events) error {
+	err := m.events.Use(ctx, func(ctx context.Context, stream *event.Events) error {
 		ctx, span := lg.Span(ctx)
 		defer span.End()
 

@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 	}
 	defer os.RemoveAll(data)
 
+	os.Setenv("EV_DATA", "mem:")
 	os.Setenv("EV_HTTP", "[::1]:61234")
 	os.Setenv("WEBFINGER_DOMAINS", "::1")
 

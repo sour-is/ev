@@ -2,6 +2,7 @@ package locker_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/matryer/is"
@@ -22,7 +23,7 @@ func TestLocker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := value.Modify(ctx, func(ctx context.Context, c *config) error {
+	err := value.Use(ctx, func(ctx context.Context, c *config) error {
 		c.Value = "one"
 		c.Counter++
 		return nil
@@ -37,7 +38,7 @@ func TestLocker(t *testing.T) {
 
 	wait := make(chan struct{})
 
-	go value.Modify(ctx, func(ctx context.Context, c *config) error {
+	go value.Use(ctx, func(ctx context.Context, c *config) error {
 		c.Value = "two"
 		c.Counter++
 		close(wait)
@@ -47,7 +48,7 @@ func TestLocker(t *testing.T) {
 	<-wait
 	cancel()
 
-	err = value.Modify(ctx, func(ctx context.Context, c *config) error {
+	err = value.Use(ctx, func(ctx context.Context, c *config) error {
 		c.Value = "three"
 		c.Counter++
 		return nil
@@ -59,4 +60,37 @@ func TestLocker(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(c.Value, "two")
 	is.Equal(c.Counter, 2)
+}
+
+func TestNestedLocker(t *testing.T) {
+	is := is.New(t)
+
+	value := locker.New(&config{})
+	other := locker.New(&config{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := value.Use(ctx, func(ctx context.Context, c *config) error {
+		return value.Use(ctx, func(ctx context.Context, t *config) error {
+			return nil
+		})
+	})
+	is.True(errors.Is(err, locker.ErrNested))
+
+	err = value.Use(ctx, func(ctx context.Context, c *config) error {
+		return other.Use(ctx, func(ctx context.Context, t *config) error {
+			return nil
+		})
+	})
+	is.NoErr(err)
+
+	err = value.Use(ctx, func(ctx context.Context, c *config) error {
+		return other.Use(ctx, func(ctx context.Context, t *config) error {
+			return value.Use(ctx, func(ctx context.Context, x *config) error {
+				return nil
+			})
+		})
+	})
+	is.True(errors.Is(err, locker.ErrNested))
 }

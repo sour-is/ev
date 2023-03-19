@@ -41,7 +41,7 @@ func (s *service) RefreshJob(ctx context.Context, _ time.Time) error {
 		return err
 	}
 
-	err = s.state.Modify(ctx, func(ctx context.Context, t *state) error {
+	err = s.state.Use(ctx, func(ctx context.Context, t *state) error {
 		for _, peer := range peers {
 			t.peers[peer.ID] = peer
 		}
@@ -88,7 +88,7 @@ func (s *service) cleanPeerJobs(ctx context.Context) error {
 	defer span.End()
 
 	peers := set.New[string]()
-	err := s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+	err := s.state.Use(ctx, func(ctx context.Context, state *state) error {
 		for id := range state.peers {
 			peers.Add(id)
 		}
@@ -181,7 +181,7 @@ func (s *service) cleanRequests(ctx context.Context, now time.Time) error {
 
 	// truncate all the request streams
 	for _, streamID := range streamIDs {
-		s.state.Modify(ctx, func(ctx context.Context, state *state) error {
+		s.state.Use(ctx, func(ctx context.Context, state *state) error {
 			return state.ApplyEvents(event.NewEvents(&RequestTruncated{
 				RequestID: streamID,
 			}))
