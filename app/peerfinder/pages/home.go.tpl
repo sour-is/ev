@@ -45,7 +45,8 @@
   <div class=row>
   <h2>Results</h2>
   {{ with $args := . }}
-  {{range $req := .Requests}}
+  {{ range $req := .Requests }}
+  {{ if ne $req.RequestID "" }}
       <div class="panel panel-primary">
           <div class="panel-heading">
             <a href="/peers/req/{{ $req.RequestID }}">
@@ -56,6 +57,7 @@
             </div>
           </div>
       </div>
+  {{end}}
   {{end}}
   {{end}}
   </div>

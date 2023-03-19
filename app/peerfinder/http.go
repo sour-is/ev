@@ -4,11 +4,13 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"sort"
@@ -91,16 +93,13 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case strings.HasPrefix(r.URL.Path, "/peers/status"):
 			s.state.Modify(r.Context(), func(ctx context.Context, state *state) error {
 				for id, p := range state.peers {
-					fmt.Fprintln(w, "PEER: ", id[24:], " ", p.Owner)
+					fmt.Fprintln(w, "PEER:", id[24:], p.Owner, p.Name)
 				}
 
 				for id, rq := range state.requests {
 					fmt.Fprintln(w, "REQ: ", id, rq.RequestIP, len(rq.Responses))
 					for id, r := range rq.Responses {
 						fmt.Fprintln(w, "  RES: ", id, r.PeerID[24:], r.Latency, r.Jitter)
-					}
-					for p := range rq.peers {
-						fmt.Fprintln(w, "  PEER: ", p[24:])
 					}
 				}
 
@@ -172,7 +171,7 @@ func (s *service) getPending(w http.ResponseWriter, r *http.Request, peerID stri
 	peerResults := &PeerResults{}
 	peerResults.SetStreamID(aggPeer(peerID))
 	err = s.es.Load(ctx, peerResults)
-	if err != nil {
+	if err != nil && !errors.Is(err, ev.ErrNotFound) {
 		span.RecordError(fmt.Errorf("peer not found: %w", err))
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -546,7 +545,7 @@ type peer struct {
 	Jitter   float64
 	VPNTypes []string
 
-	Results []peerResult
+	Results peerResults
 }
 type listPeer []peer
 
@@ -554,12 +553,27 @@ func (lis listPeer) Len() int {
 	return len(lis)
 }
 func (lis listPeer) Less(i, j int) bool {
-	if lis[i].Latency == 0.0 {
+	if diff := math.Abs(lis[i].Latency - 0.0); diff < 0.0001 {
 		return false
 	}
-	return lis[i].Latency < lis[j].Latency
+	return lis[j].Latency >= lis[i].Latency
 }
 func (lis listPeer) Swap(i, j int) {
+	lis[i], lis[j] = lis[j], lis[i]
+}
+
+type peerResults []peerResult
+
+func (lis peerResults) Len() int {
+	return len(lis)
+}
+func (lis peerResults) Less(i, j int) bool {
+	if diff := math.Abs(lis[i].Latency - 0.0); diff < 0.0001 {
+		return false
+	}
+	return lis[j].Latency >= lis[i].Latency
+}
+func (lis peerResults) Swap(i, j int) {
 	lis[i], lis[j] = lis[j], lis[i]
 }
 
@@ -567,9 +581,8 @@ func fnOrderByPeer(rq *Request) any {
 
 	peers := make(map[string]peer)
 
-	sort.Sort(ListResponse(rq.Responses))
-
-	for _, rs := range rq.Responses {
+	for i := range rq.Responses {
+		rs := rq.Responses[i]
 		p, ok := peers[rs.Peer.Owner]
 
 		if !ok {
@@ -593,7 +606,13 @@ func fnOrderByPeer(rq *Request) any {
 	}
 
 	peerList := make(listPeer, 0, len(peers))
-	for _, v := range peers {
+	for i := range peers {
+		v := peers[i]
+		sort.Sort(v.Results)
+
+		v.Latency = v.Results[0].Latency
+		v.Jitter = v.Results[0].Jitter
+
 		peerList = append(peerList, v)
 	}
 
