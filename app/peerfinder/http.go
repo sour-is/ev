@@ -656,6 +656,9 @@ func fnOrderByPeer(rq *Request) listPeer {
 		v := peers[i]
 		sort.Sort(v.Results)
 
+		
+		v.Name = v.Results[0].Name
+		v.Country = v.Results[0].Country
 		v.Latency = v.Results[0].Latency
 		v.Jitter = v.Results[0].Jitter
 
