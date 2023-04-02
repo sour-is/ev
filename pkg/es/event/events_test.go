@@ -14,21 +14,9 @@ import (
 type DummyEvent struct {
 	Value string
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
-func (e *DummyEvent) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *DummyEvent) SetEventMeta(eventMeta event.Meta) {
-	if e == nil {
-		return
-	}
-	e.eventMeta = eventMeta
-}
 func (e *DummyEvent) MarshalBinary() ([]byte, error) {
 	return json.Marshal(e)
 }

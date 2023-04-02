@@ -33,7 +33,7 @@ func (a *Request) ApplyEvent(lis ...event.Event) {
 	for _, e := range lis {
 		switch e := e.(type) {
 		case *RequestSubmitted:
-			a.RequestID = e.eventMeta.EventID.String()
+			a.RequestID = e.EventMeta().EventID.String()
 			a.RequestIP = e.RequestIP
 			a.Hidden = e.Hidden
 			a.Created = ulid.Time(e.EventMeta().EventID.Time())
@@ -120,7 +120,7 @@ func (lis ListResponse) Swap(i, j int) {
 }
 
 type RequestSubmitted struct {
-	eventMeta event.Meta
+	event.IsEvent
 
 	RequestIP string `json:"req_ip"`
 	Hidden    bool   `json:"hide,omitempty"`
@@ -154,22 +154,11 @@ func (r *RequestSubmitted) Family() int {
 	}
 }
 func (r *RequestSubmitted) String() string {
-	return fmt.Sprint(r.eventMeta.EventID, r.RequestIP, r.Hidden, r.CreatedString())
+	return fmt.Sprint(r.EventMeta().EventID, r.RequestIP, r.Hidden, r.CreatedString())
 }
 
 var _ event.Event = (*RequestSubmitted)(nil)
 
-func (e *RequestSubmitted) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *RequestSubmitted) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *RequestSubmitted) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }
@@ -204,7 +193,7 @@ func (e *RequestSubmitted) MarshalEnviron() ([]byte, error) {
 }
 
 type ResultSubmitted struct {
-	eventMeta event.Meta
+	event.IsEvent
 
 	RequestID   string  `json:"req_id"`
 	PeerID      string  `json:"peer_id"`
@@ -219,22 +208,11 @@ type ResultSubmitted struct {
 }
 
 func (r *ResultSubmitted) Created() time.Time {
-	return r.eventMeta.Created()
+	return r.EventMeta().Created()
 }
 
 var _ event.Event = (*ResultSubmitted)(nil)
 
-func (e *ResultSubmitted) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *ResultSubmitted) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *ResultSubmitted) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }
@@ -248,22 +226,11 @@ func (e *ResultSubmitted) String() string {
 type RequestTruncated struct {
 	RequestID string
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
 var _ event.Event = (*RequestTruncated)(nil)
 
-func (e *RequestTruncated) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *RequestTruncated) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *RequestTruncated) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }

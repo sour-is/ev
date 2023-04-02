@@ -8,6 +8,7 @@ import (
 	"go.sour.is/ev/app/msgbus"
 	"go.sour.is/ev/internal/lg"
 	"go.sour.is/ev/pkg/service"
+	"go.sour.is/ev/pkg/es/driver/projecter"
 	"go.sour.is/ev/pkg/slice"
 )
 
@@ -20,6 +21,7 @@ var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error 
 	if !ok {
 		return fmt.Errorf("*es.EventStore not found in services")
 	}
+	eventstore.Option(projecter.New(ctx, msgbus.Projector))
 
 	msgbus, err := msgbus.New(ctx, eventstore)
 	if err != nil {

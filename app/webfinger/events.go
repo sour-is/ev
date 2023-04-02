@@ -11,20 +11,9 @@ type SubjectSet struct {
 	Aliases    []string           `json:"aliases,omitempty"`
 	Properties map[string]*string `json:"properties,omitempty"`
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
-func (e *SubjectSet) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *SubjectSet) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *SubjectSet) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }
@@ -37,20 +26,9 @@ var _ event.Event = (*SubjectSet)(nil)
 type SubjectDeleted struct {
 	Subject string `json:"subject"`
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
-func (e *SubjectDeleted) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *SubjectDeleted) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *SubjectDeleted) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }
@@ -67,20 +45,9 @@ type LinkSet struct {
 	Titles     map[string]string  `json:"titles,omitempty"`
 	Properties map[string]*string `json:"properties,omitempty"`
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
-func (e *LinkSet) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *LinkSet) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *LinkSet) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }
@@ -93,20 +60,9 @@ var _ event.Event = (*LinkSet)(nil)
 type LinkDeleted struct {
 	Rel string `json:"rel"`
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
-func (e *LinkDeleted) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *LinkDeleted) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *LinkDeleted) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }

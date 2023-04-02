@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -156,25 +155,23 @@ func Init(ctx context.Context) error {
 }
 
 type nilEvent struct {
+	IsEvent
 }
-
-func (*nilEvent) EventMeta() Meta             { return Meta{} }
-func (*nilEvent) SetEventMeta(eventMeta Meta) {}
 
 var NilEvent = &nilEvent{}
 
 func (e *nilEvent) MarshalBinary() ([]byte, error) {
-	return json.Marshal(e)
+	return nil, nil
 }
 func (e *nilEvent) UnmarshalBinary(b []byte) error {
-	return json.Unmarshal(b, e)
+	return nil
 }
 
 type EventPtr struct {
 	StreamID string `json:"stream_id"`
 	Pos      uint64 `json:"pos"`
 
-	eventMeta Meta
+	IsEvent
 }
 
 var _ Event = (*EventPtr)(nil)
@@ -202,22 +199,6 @@ func (e *EventPtr) UnmarshalBinary(data []byte) error {
 	return err
 }
 
-// EventMeta implements Event
-func (e *EventPtr) EventMeta() Meta {
-	if e == nil {
-		return Meta{}
-	}
-	return e.eventMeta
-}
-
-// SetEventMeta implements Event
-func (e *EventPtr) SetEventMeta(m Meta) {
-	if e == nil {
-		return
-	}
-	e.eventMeta = m
-}
-
 func (e *EventPtr) Values() any {
 	return struct {
 		StreamID string `json:"stream_id"`
@@ -229,26 +210,30 @@ func (e *EventPtr) Values() any {
 }
 
 type FeedTruncated struct {
-	eventMeta Meta
-}
-
-// EventMeta implements Event
-func (e *FeedTruncated) EventMeta() Meta {
-	if e == nil {
-		return Meta{}
-	}
-	return e.eventMeta
-}
-
-// SetEventMeta implements Event
-func (e *FeedTruncated) SetEventMeta(m Meta) {
-	if e == nil {
-		return
-	}
-	e.eventMeta = m
+	IsEvent
 }
 
 func (e *FeedTruncated) Values() any {
 	return struct {
 	}{}
+}
+
+type property[T any] struct {
+	v T
+}
+
+type IsEvent = property[Meta]
+
+func (p *property[T]) EventMeta() T {
+	if p == nil {
+		var t T
+		return t
+	}
+	return p.v
+}
+
+func (p *property[T]) SetEventMeta(x T) {
+	if p != nil {
+		p.v = x
+	}
 }

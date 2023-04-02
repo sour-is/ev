@@ -48,21 +48,9 @@ func (a *Thing) OnSetValue(value string) error {
 type ValueSet struct {
 	Value string
 
-	eventMeta event.Meta
+    event.IsEvent
 }
 
-func (e *ValueSet) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *ValueSet) SetEventMeta(eventMeta event.Meta) {
-	if e == nil {
-		return
-	}
-	e.eventMeta = eventMeta
-}
 func (e *ValueSet) MarshalBinary() ([]byte, error) {
 	return json.Marshal(e)
 }

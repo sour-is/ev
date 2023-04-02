@@ -164,7 +164,7 @@ func (s *service) cleanRequests(ctx context.Context, now time.Time) error {
 		for _, event := range events {
 			switch e := event.(type) {
 			case *RequestSubmitted:
-				if e.eventMeta.ActualPosition < last-maxResults {
+				if e.EventMeta().ActualPosition < last-maxResults {
 					streamIDs = append(streamIDs, e.RequestID())
 				}
 			}

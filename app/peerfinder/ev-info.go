@@ -51,22 +51,11 @@ func (a *Info) OnUpsert() error {
 type VersionChanged struct {
 	ScriptVersion string `json:"script_version"`
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
 var _ event.Event = (*VersionChanged)(nil)
 
-func (e *VersionChanged) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *VersionChanged) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *VersionChanged) MarshalBinary() (text []byte, err error) {
 	return json.Marshal(e)
 }

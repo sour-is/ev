@@ -25,7 +25,7 @@ type UnknownEvent struct {
 	eventType string
 	values    map[string]json.RawMessage
 
-	eventMeta Meta
+	IsEvent
 }
 
 var _ Event = (*UnknownEvent)(nil)
@@ -48,16 +48,16 @@ func NewUnknownEventFromValues(eventType string, meta Meta, values url.Values) *
 		}
 	}
 
-	return &UnknownEvent{eventType: eventType, eventMeta: meta, values: jsonValues}
+	e := &UnknownEvent{eventType: eventType, values: jsonValues}
+	e.SetEventMeta(meta)
+	return e
 }
 func NewUnknownEventFromRaw(eventType string, meta Meta, values map[string]json.RawMessage) *UnknownEvent {
-	return &UnknownEvent{eventType: eventType, eventMeta: meta, values: values}
+	e := &UnknownEvent{eventType: eventType, values: values}
+	e.SetEventMeta(meta)
+	return e
 }
-func (u UnknownEvent) EventMeta() Meta   { return u.eventMeta }
 func (u UnknownEvent) EventType() string { return u.eventType }
-func (u *UnknownEvent) SetEventMeta(em Meta) {
-	u.eventMeta = em
-}
 func (u *UnknownEvent) UnmarshalBinary(b []byte) error {
 	return json.Unmarshal(b, &u.values)
 }

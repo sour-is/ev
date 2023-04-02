@@ -30,7 +30,7 @@ func (r *queryResolver) Events(ctx context.Context, streamID string, paging *gql
 }
 
 // // foo
-func (r *queryResolver) Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
+func (r *queryResolver) Posts(ctx context.Context, name, tag string, paging *gql.PageInput) (*gql.Connection, error) {
 	panic("not implemented")
 }
 
@@ -45,7 +45,7 @@ func (r *subscriptionResolver) EventAdded(ctx context.Context, streamID string, 
 }
 
 // // foo
-func (r *subscriptionResolver) PostAdded(ctx context.Context, streamID string, after int64) (<-chan *msgbus.PostEvent, error) {
+func (r *subscriptionResolver) PostAdded(ctx context.Context, name, tag string, after int64) (<-chan *msgbus.PostEvent, error) {
 	panic("not implemented")
 }
 

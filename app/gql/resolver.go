@@ -45,13 +45,13 @@ func (*noop) IsResolver() {}
 func (*noop) CreateSaltyUser(ctx context.Context, nick string, pubkey string) (*salty.SaltyUser, error) {
 	panic("not implemented")
 }
-func (*noop) Posts(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
+func (*noop) Posts(ctx context.Context, name, tag string, paging *gql.PageInput) (*gql.Connection, error) {
 	panic("not implemented")
 }
 func (*noop) SaltyUser(ctx context.Context, nick string) (*salty.SaltyUser, error) {
 	panic("not implemented")
 }
-func (*noop) PostAdded(ctx context.Context, streamID string, after int64) (<-chan *msgbus.PostEvent, error) {
+func (*noop) PostAdded(ctx context.Context, name, tag string, after int64) (<-chan *msgbus.PostEvent, error) {
 	panic("not implemented")
 }
 func (*noop) Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {

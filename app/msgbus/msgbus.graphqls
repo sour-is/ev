@@ -1,9 +1,9 @@
 extend type Query {
-    posts(streamID: String! paging: PageInput): Connection!
+    posts(name: String!, tag: String! = "", paging: PageInput): Connection!
 }
 extend type Subscription {
     """after == 0 start from begining, after == -1 start from end"""
-    postAdded(streamID: String! after: Int! = -1): PostEvent
+    postAdded(name: String!, tag: String! = "", after: Int! = -1): PostEvent
 }
 type PostEvent implements Edge @goModel(model: "go.sour.is/ev/app/msgbus.PostEvent") {
     id: ID!

@@ -33,23 +33,10 @@ func (a *Agg) ApplyEvent(lis ...event.Event) {
 type ValueApplied struct {
 	Value string
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
 var _ event.Event = (*ValueApplied)(nil)
-
-func (e *ValueApplied) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-
-func (e *ValueApplied) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 
 func (e *ValueApplied) MarshalBinary() ([]byte, error) {
 	return json.Marshal(e)

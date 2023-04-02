@@ -60,22 +60,11 @@ type UserRegistered struct {
 	Name   string
 	Pubkey *keys.EdX25519PublicKey
 
-	eventMeta event.Meta
+	event.IsEvent
 }
 
 var _ event.Event = (*UserRegistered)(nil)
 
-func (e *UserRegistered) EventMeta() event.Meta {
-	if e == nil {
-		return event.Meta{}
-	}
-	return e.eventMeta
-}
-func (e *UserRegistered) SetEventMeta(m event.Meta) {
-	if e != nil {
-		e.eventMeta = m
-	}
-}
 func (e *UserRegistered) MarshalBinary() (text []byte, err error) {
 	var b bytes.Buffer
 	b.WriteString(e.Name)
