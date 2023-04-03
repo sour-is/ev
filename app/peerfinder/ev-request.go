@@ -14,7 +14,7 @@ import (
 )
 
 type Request struct {
-	event.AggregateRoot
+	event.IsAggregate
 
 	RequestID string    `json:"req_id"`
 	RequestIP string    `json:"req_ip"`
@@ -213,12 +213,6 @@ func (r *ResultSubmitted) Created() time.Time {
 
 var _ event.Event = (*ResultSubmitted)(nil)
 
-func (e *ResultSubmitted) MarshalBinary() (text []byte, err error) {
-	return json.Marshal(e)
-}
-func (e *ResultSubmitted) UnmarshalBinary(b []byte) error {
-	return json.Unmarshal(b, e)
-}
 func (e *ResultSubmitted) String() string {
 	return fmt.Sprintf("id: %s\npeer: %s\nversion: %s\nlatency: %0.4f", e.RequestID, e.PeerID, e.PeerVersion, e.Latency)
 }
@@ -231,12 +225,6 @@ type RequestTruncated struct {
 
 var _ event.Event = (*RequestTruncated)(nil)
 
-func (e *RequestTruncated) MarshalBinary() (text []byte, err error) {
-	return json.Marshal(e)
-}
-func (e *RequestTruncated) UnmarshalBinary(b []byte) error {
-	return json.Unmarshal(b, e)
-}
 func (e *RequestTruncated) String() string {
 	return fmt.Sprintf("request truncated id: %s\n", e.RequestID)
 }

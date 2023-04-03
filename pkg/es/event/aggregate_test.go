@@ -1,7 +1,6 @@
 package event_test
 
 import (
-	"encoding/json"
 	"testing"
 
 	"go.sour.is/ev/pkg/es/event"
@@ -10,7 +9,7 @@ import (
 type Agg struct {
 	Value string
 
-	event.AggregateRoot
+	event.IsAggregate
 }
 
 var _ event.Aggregate = (*Agg)(nil)
@@ -37,13 +36,6 @@ type ValueApplied struct {
 }
 
 var _ event.Event = (*ValueApplied)(nil)
-
-func (e *ValueApplied) MarshalBinary() ([]byte, error) {
-	return json.Marshal(e)
-}
-func (e *ValueApplied) UnmarshalBinary(b []byte) error {
-	return json.Unmarshal(b, e)
-}
 
 func TestAggregate(t *testing.T) {
 	agg := &Agg{}

@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 
 	os.Setenv("EV_DATA", "mem:")
 	os.Setenv("EV_HTTP", "[::1]:61234")
-	os.Setenv("WEBFINGER_DOMAINS", "::1")
+	os.Setenv("WEBFINGER_DOMAINS", "sour.is")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -76,7 +76,7 @@ func TestCreateResource(t *testing.T) {
 	is.NoErr(err)
 
 	jrd := &webfinger.JRD{
-		Subject: "me@sour.is",
+		Subject: "acct:me@sour.is",
 		Properties: map[string]*string{
 			"foo": ptr("bar"),
 		},
@@ -104,7 +104,7 @@ func TestCreateResource(t *testing.T) {
 	is.Equal(res.StatusCode, http.StatusAlreadyReported)
 
 	// fetch
-	req, err = http.NewRequest(http.MethodGet, "http://[::1]:61234/.well-known/webfinger?resource=me@sour.is", nil)
+	req, err = http.NewRequest(http.MethodGet, "http://[::1]:61234/.well-known/webfinger?resource=acct:me@sour.is", nil)
 	is.NoErr(err)
 
 	res, err = http.DefaultClient.Do(req)

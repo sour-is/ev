@@ -12,7 +12,7 @@ type Aggregate interface {
 	// ApplyEvent  applies the event to the aggrigate state
 	ApplyEvent(...Event)
 
-	AggregateRootInterface
+	AggregateRoot
 }
 
 func Start(a Aggregate, i uint64) {
@@ -49,7 +49,7 @@ func ShouldExist(a Aggregate) error {
 	return nil
 }
 
-type AggregateRootInterface interface {
+type AggregateRoot interface {
 	// Events returns the aggregate events
 	// pass true for only uncommitted events
 	Events(bool) Events
@@ -68,9 +68,9 @@ type AggregateRootInterface interface {
 	Commit()
 }
 
-var _ AggregateRootInterface = &AggregateRoot{}
+var _ AggregateRoot = &IsAggregate{}
 
-type AggregateRoot struct {
+type IsAggregate struct {
 	events     Events
 	streamID   string
 	firstIndex uint64
@@ -79,12 +79,12 @@ type AggregateRoot struct {
 	mu sync.RWMutex
 }
 
-func (a *AggregateRoot) Commit()                       { a.lastIndex = uint64(len(a.events)) }
-func (a *AggregateRoot) StreamID() string              { return a.streamID }
-func (a *AggregateRoot) SetStreamID(streamID string)   { a.streamID = streamID }
-func (a *AggregateRoot) StreamVersion() uint64         { return a.lastIndex }
-func (a *AggregateRoot) Version() uint64               { return a.firstIndex + uint64(len(a.events)) }
-func (a *AggregateRoot) Events(new bool) Events {
+func (a *IsAggregate) Commit()                     { a.lastIndex = uint64(len(a.events)) }
+func (a *IsAggregate) StreamID() string            { return a.streamID }
+func (a *IsAggregate) SetStreamID(streamID string) { a.streamID = streamID }
+func (a *IsAggregate) StreamVersion() uint64       { return a.lastIndex }
+func (a *IsAggregate) Version() uint64             { return a.firstIndex + uint64(len(a.events)) }
+func (a *IsAggregate) Events(new bool) Events {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
@@ -99,13 +99,13 @@ func (a *AggregateRoot) Events(new bool) Events {
 	return lis
 }
 
-func (a *AggregateRoot) start(i uint64) {
+func (a *IsAggregate) start(i uint64) {
 	a.firstIndex = i
 	a.lastIndex = i
 }
 
 //lint:ignore U1000 is called by embeded interface
-func (a *AggregateRoot) raise(lis ...Event) { //nolint
+func (a *IsAggregate) raise(lis ...Event) { //nolint
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -115,7 +115,7 @@ func (a *AggregateRoot) raise(lis ...Event) { //nolint
 }
 
 //lint:ignore U1000 is called by embeded interface
-func (a *AggregateRoot) append(lis ...Event) {
+func (a *IsAggregate) append(lis ...Event) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -125,7 +125,7 @@ func (a *AggregateRoot) append(lis ...Event) {
 	a.lastIndex += uint64(len(lis))
 }
 
-func (a *AggregateRoot) posStartAt(lis ...Event) {
+func (a *IsAggregate) posStartAt(lis ...Event) {
 	for i, e := range lis {
 		m := e.EventMeta()
 		m.Position = a.lastIndex + uint64(i) + 1

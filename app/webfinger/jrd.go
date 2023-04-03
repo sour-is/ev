@@ -28,8 +28,8 @@ type JRD struct {
 	Properties map[string]*string `json:"properties,omitempty" yaml:"properties,omitempty"`
 	Links      Links              `json:"links,omitempty" yaml:"links,omitempty"`
 
-	deleted             bool
-	event.AggregateRoot `yaml:"-"`
+	deleted           bool
+	event.IsAggregate `yaml:"-"`
 }
 
 func (a *JRD) CloneValues() *JRD {

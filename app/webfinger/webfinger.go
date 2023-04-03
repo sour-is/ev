@@ -231,14 +231,13 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		host, _ := splitHostPort(r.Host)
-
-		if u := Parse(resource); u != nil && !s.self.Has(host) {
+		if u := Parse(resource); u != nil && !s.self.Has(u.URL.Host) {
 			redirect := &url.URL{}
-			redirect.Scheme = u.URL.Scheme
+			redirect.Scheme = "https"
 			redirect.Host = u.URL.Host
 			redirect.RawQuery = r.URL.RawQuery
 			redirect.Path = "/.well-known/webfinger"
+			fmt.Println(redirect)
 			w.Header().Set("location", redirect.String())
 			w.WriteHeader(http.StatusSeeOther)
 			return

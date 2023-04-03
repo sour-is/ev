@@ -82,10 +82,10 @@ func Handler(title string, endpoint string) http.HandlerFunc {
 			"endpoint":             endpoint,
 			"endpointIsAbsolute":   endpointHasScheme(endpoint),
 			"subscriptionEndpoint": getSubscriptionEndpoint(endpoint),
-			"version":              "2.0.13",
+			"version":              "2.4.1",
 			"reactVersion":         "17.0.2",
-			"cssSRI":               "sha256-qKvndYgkAMQOBoa1SZF9NlbIig+kQ3Fk4f8wlrEqBLw=",
-			"jsSRI":                "sha256-dExtzxjgqXfOgQ94xw079jAjd4dPAFrO2Qz6I3Yd9Ko=",
+			"cssSRI":               "sha256-bGeEsMhcAqeXBjh2w0eQzBTFAxwlxhM0PKIKqMshlnk=",
+			"jsSRI":                "sha256-s+f7CFAPSUIygFnRC2nfoiEKd3liCUy+snSdYFAoLUc=",
 			"reactSRI":             "sha256-Ipu/TQ50iCCVZBUsZyNJfxrDk0E2yhaEIz0vqI+kFG8=",
 			"reactDOMSRI":          "sha256-nbMykgB6tsOFJ7OdVmPpdqMFVk4ZsqWocT6issAPUF0=",
 		})

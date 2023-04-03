@@ -2,7 +2,6 @@ package ev_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -29,7 +28,7 @@ type Thing struct {
 	Name  string
 	Value string
 
-	event.AggregateRoot
+	event.IsAggregate
 }
 
 func (a *Thing) ApplyEvent(lis ...event.Event) {
@@ -48,14 +47,7 @@ func (a *Thing) OnSetValue(value string) error {
 type ValueSet struct {
 	Value string
 
-    event.IsEvent
-}
-
-func (e *ValueSet) MarshalBinary() ([]byte, error) {
-	return json.Marshal(e)
-}
-func (e *ValueSet) UnmarshalBinary(b []byte) error {
-	return json.Unmarshal(b, e)
+	event.IsEvent
 }
 
 func TestES(t *testing.T) {

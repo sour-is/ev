@@ -2,6 +2,8 @@ package es
 
 import (
 	"context"
+	"encoding"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -164,8 +166,17 @@ func (e *GQLEvent) Values() map[string]interface{} {
 	return event.Values(e.e)
 }
 func (e *GQLEvent) Bytes() (string, error) {
-	b, err := e.e.MarshalBinary()
-	return string(b), err
+	switch e := e.e.(type) {
+	case encoding.BinaryMarshaler:
+		b, err := e.MarshalBinary()
+		return string(b), err
+	case encoding.TextMarshaler:
+		b, err := e.MarshalText()
+		return string(b), err
+	default:
+		b, err := json.Marshal(e)
+		return string(b), err
+	}
 }
 func (e *GQLEvent) Meta() *event.Meta {
 	meta := e.e.EventMeta()

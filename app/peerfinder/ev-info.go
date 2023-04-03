@@ -2,7 +2,6 @@ package peerfinder
 
 import (
 	"bytes"
-	"encoding/json"
 
 	"github.com/tj/go-semver"
 
@@ -12,7 +11,7 @@ import (
 type Info struct {
 	ScriptVersion string `json:"script_version"`
 
-	event.AggregateRoot
+	event.IsAggregate
 }
 
 var _ event.Aggregate = (*Info)(nil)
@@ -55,10 +54,3 @@ type VersionChanged struct {
 }
 
 var _ event.Event = (*VersionChanged)(nil)
-
-func (e *VersionChanged) MarshalBinary() (text []byte, err error) {
-	return json.Marshal(e)
-}
-func (e *VersionChanged) UnmarshalBinary(b []byte) error {
-	return json.Unmarshal(b, e)
-}

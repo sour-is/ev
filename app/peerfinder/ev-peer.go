@@ -94,7 +94,7 @@ func (p *Peer) CanSupport(ip string) bool {
 
 type PeerResults struct {
 	set.Set[string]
-	event.AggregateRoot
+	event.IsAggregate
 }
 
 func (p *PeerResults) ApplyEvent(lis ...event.Event) {

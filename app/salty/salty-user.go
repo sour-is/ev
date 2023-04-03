@@ -20,7 +20,7 @@ type SaltyUser struct {
 	pubkey *keys.EdX25519PublicKey
 	inbox  ulid.ULID
 
-	event.AggregateRoot
+	event.IsAggregate
 }
 
 var _ event.Aggregate = (*SaltyUser)(nil)

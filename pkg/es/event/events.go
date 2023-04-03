@@ -4,7 +4,6 @@ package event
 import (
 	"context"
 	"crypto/rand"
-	"encoding"
 	"fmt"
 	"io"
 	"strconv"
@@ -32,9 +31,6 @@ func getULID() ulid.ULID {
 type Event interface {
 	EventMeta() Meta
 	SetEventMeta(Meta)
-
-	encoding.BinaryMarshaler
-	encoding.BinaryUnmarshaler
 }
 
 // Events is a list of events

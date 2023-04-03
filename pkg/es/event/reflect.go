@@ -3,6 +3,7 @@ package event
 import (
 	"bytes"
 	"context"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -151,7 +152,8 @@ func GetContainer(ctx context.Context, s string) Event {
 	return e
 }
 
-func MarshalBinary(e Event) (txt []byte, err error) {
+func MarshalBinary(e Event) ([]byte, error) {
+	var err error
 	b := &bytes.Buffer{}
 
 	m := e.EventMeta()
@@ -167,10 +169,22 @@ func MarshalBinary(e Event) (txt []byte, err error) {
 		return nil, err
 	}
 	b.WriteRune('\t')
-	if txt, err = e.MarshalBinary(); err != nil {
-		return nil, err
+	switch e := e.(type) {
+	case encoding.BinaryMarshaler:
+		var txt []byte
+		if txt, err = e.MarshalBinary(); err != nil {
+			return nil, err
+		}
+		_, err = b.Write(txt)
+	case encoding.TextMarshaler:
+		var txt []byte
+		if txt, err = e.MarshalText(); err != nil {
+			return nil, err
+		}
+		_, err = b.Write(txt)
+	default:
+		err = json.NewEncoder(b).Encode(e)
 	}
-	_, err = b.Write(txt)
 
 	return b.Bytes(), err
 }
@@ -200,12 +214,23 @@ func UnmarshalBinary(ctx context.Context, txt []byte, pos uint64) (e Event, err 
 	eventType := string(sp[2])
 	e = GetContainer(ctx, eventType)
 	span.AddEvent(fmt.Sprintf("%s == %T", eventType, e))
-
-	if err = e.UnmarshalBinary(sp[3]); err != nil {
-		span.RecordError(err)
-		return nil, err
+	switch e := e.(type) {
+	case encoding.BinaryUnmarshaler:
+		if err = e.UnmarshalBinary(sp[3]); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+	case encoding.TextUnmarshaler:
+		if err = e.UnmarshalText(sp[3]); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+	default:
+		if err = json.Unmarshal(sp[3], e); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
 	}
-
 	e.SetEventMeta(m)
 
 	return e, nil
