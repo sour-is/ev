@@ -23,13 +23,12 @@ func StreamID(subject string) string {
 // JRD is a JSON Resource Descriptor, specifying properties and related links
 // for a resource.
 type JRD struct {
-	Subject    string             `json:"subject,omitempty" yaml:"subject,omitempty"`
-	Aliases    []string           `json:"aliases,omitempty" yaml:"aliases,omitempty"`
-	Properties map[string]*string `json:"properties,omitempty" yaml:"properties,omitempty"`
-	Links      Links              `json:"links,omitempty" yaml:"links,omitempty"`
-
+	Subject           string             `json:"subject,omitempty" yaml:"subject,omitempty"`
+	Aliases           []string           `json:"aliases,omitempty" yaml:"aliases,omitempty"`
+	Properties        map[string]*string `json:"properties,omitempty" yaml:"properties,omitempty"`
+	Links             Links              `json:"links,omitempty" yaml:"links,omitempty"`
 	deleted           bool
-	event.IsAggregate `yaml:"-"`
+	event.IsAggregate `json:"-" yaml:"-"`
 }
 
 func (a *JRD) CloneValues() *JRD {
@@ -49,6 +48,7 @@ var _ event.Aggregate = (*JRD)(nil)
 
 // Link is a link to a related resource.
 type Link struct {
+	Index      uint64             `json:"-" yaml:"-"`
 	Rel        string             `json:"rel,omitempty"`
 	Type       string             `json:"type,omitempty"`
 	HRef       string             `json:"href,omitempty"`
@@ -71,6 +71,9 @@ func (l Links) Less(i int, j int) bool {
 	if l[i] == nil || l[j] == nil {
 		return false
 	}
+	if l[i].Rel == l[j].Rel {
+		return l[i].Type < l[j].Type
+	}
 	return l[i].Rel < l[j].Rel
 }
 
@@ -89,6 +92,9 @@ func ParseJRD(blob []byte) (*JRD, error) {
 	if err != nil {
 		return nil, err
 	}
+	for i := range jrd.Links {
+		jrd.Links[i].Index = uint64(i)
+	}
 	return &jrd, nil
 }
 
@@ -102,7 +108,7 @@ func (jrd *JRD) GetLinkByRel(rel string) *Link {
 	return nil
 }
 
-// GetLinksByRel returns the first *Link with the specified rel value.
+// GetLinksByRel returns each *Link with the specified rel value.
 func (jrd *JRD) GetLinksByRel(rel ...string) []*Link {
 	var lis []*Link
 	rels := set.New(rel...)
@@ -180,20 +186,21 @@ func (a *JRD) ApplyEvent(events ...event.Event) {
 			a.Properties = map[string]*string{}
 
 		case *LinkSet:
-			link, ok := slice.FindFn(func(l *Link) bool { return l.Rel == e.Rel }, a.Links...)
+			link, ok := slice.FindFn(func(l *Link) bool { return l.Index == e.Index }, a.Links...)
 			if !ok {
 				link = &Link{}
-				link.Rel = e.Rel
+				link.Index = uint64(len(a.Links))
 				a.Links = append(a.Links, link)
 			}
 
+			link.Rel = e.Rel
 			link.HRef = e.HRef
 			link.Type = e.Type
 			link.Titles = e.Titles
 			link.Properties = e.Properties
 
 		case *LinkDeleted:
-			a.Links = slice.FilterFn(func(link *Link) bool { return link.Rel != e.Rel }, a.Links...)
+			a.Links = slice.FilterFn(func(link *Link) bool { return link.Index != e.Index }, a.Links...)
 		}
 	}
 }
@@ -241,17 +248,15 @@ func (a *JRD) OnClaims(jrd *JRD) error {
 		return err
 	}
 
-	sort.Sort(jrd.Links)
-	sort.Sort(a.Links)
 	for _, z := range slice.Align(
 		jrd.Links,
 		a.Links,
-		func(l, r *Link) bool { return l.Rel < r.Rel },
+		func(l, r *Link) bool { return l.Index < r.Index },
 	) {
 		// Not in new == delete
 		if z.Key == nil {
 			link := *z.Value
-			event.Raise(a, &LinkDeleted{Rel: link.Rel})
+			event.Raise(a, &LinkDeleted{Index: link.Index, Rel: link.Rel})
 			continue
 		}
 
@@ -259,6 +264,7 @@ func (a *JRD) OnClaims(jrd *JRD) error {
 		if z.Value == nil {
 			link := *z.Key
 			event.Raise(a, &LinkSet{
+				Index:      link.Index,
 				Rel:        link.Rel,
 				Type:       link.Type,
 				HRef:       link.HRef,
@@ -324,6 +330,7 @@ func (a *JRD) OnSubjectSet(subject string, aliases []string, props map[string]*s
 func (a *JRD) OnLinkSet(o, n *Link) error {
 	modified := false
 	e := &LinkSet{
+		Index:      n.Index,
 		Rel:        n.Rel,
 		Type:       n.Type,
 		HRef:       n.HRef,
@@ -331,39 +338,66 @@ func (a *JRD) OnLinkSet(o, n *Link) error {
 		Properties: n.Properties,
 	}
 
+	// if n.Index != o.Index {
+	// 	fmt.Println(342)
+	// 	modified = true
+	// }
 	if n.Rel != o.Rel {
+		fmt.Println(346)
 		modified = true
 	}
 	if n.Type != o.Type {
+		fmt.Println(350)
+
 		modified = true
 	}
 	if n.HRef != o.HRef {
+		fmt.Println(355)
+
 		modified = true
 	}
 
+	nKeys := slice.FromMapKeys(n.Properties)
+	sort.Strings(nKeys)
+
+	oKeys := slice.FromMapKeys(o.Properties)
+	sort.Strings(oKeys)
+
 	for _, z := range slice.Zip(
-		slice.Zip(slice.FromMap(n.Titles)),
-		slice.Zip(slice.FromMap(o.Titles)),
+		slice.Zip(nKeys, slice.FromMapValues(n.Titles, nKeys)),
+		slice.Zip(oKeys, slice.FromMapValues(o.Titles, oKeys)),
 	) {
 		if z.Key != z.Value {
+			fmt.Println(365)
+
 			modified = true
 			break
 		}
 	}
 
+	nKeys = slice.FromMapKeys(n.Properties)
+	sort.Strings(nKeys)
+
+	oKeys = slice.FromMapKeys(o.Properties)
+	sort.Strings(oKeys)
+
 	for _, z := range slice.Zip(
-		slice.Zip(slice.FromMap(n.Properties)),
-		slice.Zip(slice.FromMap(o.Properties)),
+		slice.Zip(nKeys, slice.FromMapValues(n.Properties, nKeys)),
+		slice.Zip(oKeys, slice.FromMapValues(o.Properties, oKeys)),
 	) {
 		newValue := z.Key
 		curValue := z.Value
 
 		if newValue.Key != curValue.Key {
+			fmt.Println(380, newValue.Key, curValue.Key)
+
 			modified = true
 			break
 		}
 
 		if !cmpPtr(newValue.Value, curValue.Value) {
+			fmt.Println(387)
+
 			modified = true
 			break
 		}

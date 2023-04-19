@@ -38,7 +38,7 @@ var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error 
 		cache.SetDefault(s, true)
 		return false
 	})
-	var withHostnames webfinger.WithHostnames = strings.Fields(env.Default("WEBFINGER_DOMAINS", "sour.is"))
+	var withHostnames webfinger.WithHostnames = strings.Fields(env.Default(" ", "sour.is"))
 
 	wf, err := webfinger.New(ctx, eventstore, withCache, withHostnames)
 	if err != nil {

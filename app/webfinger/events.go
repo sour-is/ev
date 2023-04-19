@@ -9,7 +9,7 @@ type SubjectSet struct {
 	Aliases    []string           `json:"aliases,omitempty"`
 	Properties map[string]*string `json:"properties,omitempty"`
 
-	event.IsEvent
+	event.IsEvent `json:"-"`
 }
 
 var _ event.Event = (*SubjectSet)(nil)
@@ -17,27 +17,29 @@ var _ event.Event = (*SubjectSet)(nil)
 type SubjectDeleted struct {
 	Subject string `json:"subject"`
 
-	event.IsEvent
+	event.IsEvent `json:"-"`
 }
 
 var _ event.Event = (*SubjectDeleted)(nil)
 
 type LinkSet struct {
+	Index      uint64             `json:"idx"`
 	Rel        string             `json:"rel"`
 	Type       string             `json:"type,omitempty"`
 	HRef       string             `json:"href,omitempty"`
 	Titles     map[string]string  `json:"titles,omitempty"`
 	Properties map[string]*string `json:"properties,omitempty"`
 
-	event.IsEvent
+	event.IsEvent `json:"-"`
 }
 
 var _ event.Event = (*LinkSet)(nil)
 
 type LinkDeleted struct {
-	Rel string `json:"rel"`
+	Index uint64 `json:"idx"`
+	Rel   string `json:"rel"`
 
-	event.IsEvent
+	event.IsEvent `json:"-"`
 }
 
 var _ event.Event = (*LinkDeleted)(nil)

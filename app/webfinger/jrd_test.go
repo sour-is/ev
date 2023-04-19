@@ -111,23 +111,27 @@ func TestApplyEvents(t *testing.T) {
 			},
 		},
 		&webfinger.LinkSet{
-			Rel:  "salty:public",
-			Type: "application/json+salty",
+			Index: 0,
+			Rel:   "salty:public",
+			Type:  "application/json+salty",
 		},
 		&webfinger.LinkSet{
-			Rel:  "salty:private",
-			Type: "application/json+salty",
+			Index: 1,
+			Rel:   "salty:private",
+			Type:  "application/json+salty",
 		},
 		&webfinger.LinkSet{
-			Rel:  "salty:public",
-			Type: "application/json+salty",
-			HRef: "https://ev.sour.is/inbox/01GAEMKXYJ4857JQP1MJGD61Z5",
+			Index: 0,
+			Rel:   "salty:public",
+			Type:  "application/json+salty",
+			HRef:  "https://ev.sour.is/inbox/01GAEMKXYJ4857JQP1MJGD61Z5",
 			Properties: map[string]*string{
 				"pub": ptr("kex1r8zshlvkc787pxvauaq7hd6awa9kmheddxjj9k80qmenyxk6284s50uvpw"),
 			},
 		},
 		&webfinger.LinkDeleted{
-			Rel: "salty:private",
+			Index: 1,
+			Rel:   "salty:private",
 		},
 	)
 	event.SetStreamID(webfinger.StreamID("acct:me@sour.is"), events...)
@@ -167,7 +171,6 @@ func TestCommands(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	is.NoErr(err)
 
-	// fmt.Println(base64.RawURLEncoding.EncodeToString(key))
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
 		"sub":     "acct:me@sour.is",
 		"pub":     enc(pub),

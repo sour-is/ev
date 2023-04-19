@@ -112,6 +112,10 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return nil, fmt.Errorf("wrong type of claim")
 				}
 
+				if c.JRD == nil {
+					c.JRD = &JRD{}
+				}
+
 				c.JRD.Subject = c.RegisteredClaims.Subject
 
 				c.SetProperty(NSpubkey, &c.PubKey)
@@ -149,8 +153,16 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		for i := range c.JRD.Links {
+			c.JRD.Links[i].Index = uint64(i)
+		}
+
 		a, err := ev.Upsert(ctx, s.es, StreamID(c.JRD.Subject), func(ctx context.Context, a *JRD) error {
 			var auth *JRD
+
+			for i := range a.Links {
+				a.Links[i].Index = uint64(i)
+			}
 
 			// does the target have a pubkey for self auth?
 			if _, ok := a.Properties[NSpubkey]; ok {
@@ -237,7 +249,7 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			redirect.Host = u.URL.Host
 			redirect.RawQuery = r.URL.RawQuery
 			redirect.Path = "/.well-known/webfinger"
-			fmt.Println(redirect)
+
 			w.Header().Set("location", redirect.String())
 			w.WriteHeader(http.StatusSeeOther)
 			return
@@ -300,31 +312,32 @@ func dec(s string) ([]byte, error) {
 	s = strings.TrimSpace(s)
 	return base64.RawURLEncoding.DecodeString(s)
 }
-func splitHostPort(hostPort string) (host, port string) {
-	host = hostPort
 
-	colon := strings.LastIndexByte(host, ':')
-	if colon != -1 && validOptionalPort(host[colon:]) {
-		host, port = host[:colon], host[colon+1:]
-	}
+// func splitHostPort(hostPort string) (host, port string) {
+// 	host = hostPort
 
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		host = host[1 : len(host)-1]
-	}
+// 	colon := strings.LastIndexByte(host, ':')
+// 	if colon != -1 && validOptionalPort(host[colon:]) {
+// 		host, port = host[:colon], host[colon+1:]
+// 	}
 
-	return
-}
-func validOptionalPort(port string) bool {
-	if port == "" {
-		return true
-	}
-	if port[0] != ':' {
-		return false
-	}
-	for _, b := range port[1:] {
-		if b < '0' || b > '9' {
-			return false
-		}
-	}
-	return true
-}
+// 	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+// 		host = host[1 : len(host)-1]
+// 	}
+
+// 	return
+// }
+// func validOptionalPort(port string) bool {
+// 	if port == "" {
+// 		return true
+// 	}
+// 	if port[0] != ':' {
+// 		return false
+// 	}
+// 	for _, b := range port[1:] {
+// 		if b < '0' || b > '9' {
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }

@@ -44,11 +44,11 @@ func First[T any](in ...T) (T, bool) {
 }
 
 // Map applys func to each element s and returns results as slice.
-func Map[T, U any](f func(T) U) func(...T) []U {
+func Map[T, U any](f func(int, T) U) func(...T) []U {
 	return func(lis ...T) []U {
 		r := make([]U, len(lis))
 		for i, v := range lis {
-			r[i] = f(v)
+			r[i] = f(i, v)
 		}
 		return r
 	}
@@ -73,18 +73,37 @@ func FromMap[K comparable, V any](m map[K]V) (keys []K, values []V) {
 		return nil, nil
 	}
 
+	keys = FromMapKeys(m)
+	return keys, FromMapValues(m, keys)
+}
+
+func FromMapKeys[K comparable, V any](m map[K]V) (keys []K) {
+	if m == nil {
+		return nil
+	}
+
 	keys = make([]K, 0, len(m))
-	values = make([]V, 0, len(m))
 
 	for k := range m {
 		keys = append(keys, k)
 	}
+
+	return keys
+}
+
+func FromMapValues[K comparable, V any](m map[K]V, keys []K) (values []V) {
+	if m == nil {
+		return nil
+	}
+
+	values = make([]V, 0, len(keys))
 	for _, k := range keys {
 		values = append(values, m[k])
 	}
 
-	return keys, values
+	return values
 }
+
 
 func ToMap[K comparable, V any](keys []K, values []V) (m map[K]V) {
 	m = make(map[K]V, len(keys))
