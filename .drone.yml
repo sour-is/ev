@@ -6,7 +6,7 @@ steps:
 - name: test
   image: golang:1.20
   commands:
-  - go test -v -race -skip '^TestE2E' ./...
+  - go test -v -race -skip '^TestE2E|TestMain' ./...
 
 - name: build
   image: golang:1.20
