@@ -7,3 +7,14 @@ steps:
   image: golang:1.20
   commands:
   - go test -v -race -skip '^TestE2E' ./...
+
+- name: deploy
+  image: plugins/ansible:3
+  settings:
+    playbook: .ansible/playbook.yml
+    inventory: .ansible/inventory
+    become: true
+    become_method: sudo
+    user: deploy
+    private_key: 
+      from_secret: drone_ssh
