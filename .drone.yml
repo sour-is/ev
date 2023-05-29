@@ -8,6 +8,17 @@ steps:
   commands:
   - go test -v -race -skip '^TestE2E|TestMain' ./...
 
+trigger:
+  event:
+  - push
+  - pull_request
+
+---
+kind: pipeline
+type: docker
+name: deploy
+
+steps:
 - name: build
   image: golang:1.20
   environment:
@@ -21,17 +32,6 @@ steps:
   commands: 
     - upx --best --lzma -o ev build/ev
 
-trigger:
-  event:
-  - push
-  - pull_request
-
----
-kind: pipeline
-type: docker
-name: deploy
-
-steps:
 - name: deploy
   image: plugins/ansible:3
   settings:
@@ -47,4 +47,4 @@ trigger:
   event:
   - promote
   target:
-  - lavana
+  - production
