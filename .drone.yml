@@ -30,7 +30,7 @@ steps:
 - name: compress
   image: gruebel/upx:latest
   commands: 
-    - upx --best --lzma -o ev build/ev
+    - upx --best --lzma -o .ansible/ev build/ev
 
 - name: deploy
   image: plugins/ansible:3
