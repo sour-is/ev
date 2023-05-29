@@ -39,6 +39,7 @@ steps:
     inventory: .ansible/inventory
     become: true
     become_method: sudo
+    ssh_common_args: -p 65535
     user: deploy
     private_key: 
       from_secret: drone_ssh
