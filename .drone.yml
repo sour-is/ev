@@ -16,6 +16,11 @@ steps:
   commands:
   - go build -ldflags "-s -w" -o build/ev ./cmd/ev 
 
+- name: compress
+  image: gruebel/upx:latest
+  commands: 
+    - upx --best --lzma -o ev build/ev
+
 ---
 kind: pipeline
 type: docker
