@@ -1,12 +1,25 @@
 kind: pipeline
 type: docker
-name: default
+name: build
 
 steps:
 - name: test
   image: golang:1.20
   commands:
   - go test -v -race -skip '^TestE2E' ./...
+
+- name: build
+  image: golang:1.20
+  environment:
+    GOOS: linux
+    GOARCH: amd64 
+  commands:
+  - go build -ldflags "-s -w" -o build/ev ./cmd/ev 
+
+---
+kind: pipeline
+type: docker
+name: default
 
 - name: deploy
   image: plugins/ansible:3
@@ -18,3 +31,9 @@ steps:
     user: deploy
     private_key: 
       from_secret: drone_ssh
+
+trigger:
+  event:
+  - promote
+  target:
+  - lavana
