@@ -3,13 +3,20 @@ package webfinger
 import (
 	"context"
 	"crypto/ed25519"
+	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
+	"html/template"
 	"io"
+	"io/fs"
+	"log"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -17,6 +24,12 @@ import (
 	"go.sour.is/ev/internal/lg"
 	"go.sour.is/ev/pkg/es/event"
 	"go.sour.is/ev/pkg/set"
+)
+
+var (
+	//go:embed ui/*/*
+	files     embed.FS
+	templates map[string]*template.Template
 )
 
 type service struct {
@@ -63,7 +76,13 @@ func New(ctx context.Context, es *ev.EventStore, opts ...Option) (*service, erro
 	return svc, nil
 }
 
-func (s *service) RegisterHTTP(mux *http.ServeMux) {}
+func (s *service) RegisterHTTP(mux *http.ServeMux) {
+	a, _ := fs.Sub(files, "ui/assets")
+	assets := http.StripPrefix("/webfinger/assets/", http.FileServer(http.FS(a)))
+
+	mux.Handle("/webfinger", s.ui())
+	mux.Handle("/webfinger/assets/", assets)
+}
 func (s *service) RegisterWellKnown(mux *http.ServeMux) {
 	mux.Handle("/webfinger", lg.Htrace(s, "webfinger"))
 }
@@ -152,6 +171,8 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+
+		json.NewEncoder(os.Stdout).Encode(c.JRD)
 
 		for i := range c.JRD.Links {
 			c.JRD.Links[i].Index = uint64(i)
@@ -307,37 +328,88 @@ func (s *service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		span.AddEvent("method not allow: " + r.Method)
 	}
 }
+func (s *service) ui() http.HandlerFunc {
+	loadTemplates()
+	return func(w http.ResponseWriter, r *http.Request) {
+		args := struct {
+			Req    *http.Request
+			Status int
+			Body   []byte
+			JRD    *JRD
+			Err    error
+		}{Status: http.StatusOK}
+
+		if r.URL.Query().Has("resource") {
+			args.Req, args.Err = http.NewRequestWithContext(r.Context(), http.MethodGet, r.URL.String(), nil)
+			if args.Err != nil {
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+				return
+			}
+			wr := httptest.NewRecorder()
+			s.ServeHTTP(wr, args.Req)
+
+			args.Status = wr.Code
+
+			switch wr.Code {
+			case http.StatusSeeOther:
+				res, err := http.DefaultClient.Get(wr.Header().Get("location"))
+				args.Err = err
+				if err == nil {
+					args.Status = res.StatusCode
+					args.Body, args.Err = io.ReadAll(res.Body)
+				}
+			case http.StatusOK:
+				args.Body, args.Err = io.ReadAll(wr.Body)
+				if args.Err == nil {
+					args.JRD, args.Err = ParseJRD(args.Body)
+				}
+			}
+			if args.Err == nil && args.Body != nil {
+				args.JRD, args.Err = ParseJRD(args.Body)
+			}
+		}
+
+		t := templates["home.go.tpl"]
+		err := t.Execute(w, args)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+}
 
 func dec(s string) ([]byte, error) {
 	s = strings.TrimSpace(s)
 	return base64.RawURLEncoding.DecodeString(s)
 }
 
-// func splitHostPort(hostPort string) (host, port string) {
-// 	host = hostPort
+var funcMap = map[string]any{
+	"propName": func(in string) string { return in[strings.LastIndex(in, "/")+1:] },
+	"escape":   html.EscapeString,
+}
 
-// 	colon := strings.LastIndexByte(host, ':')
-// 	if colon != -1 && validOptionalPort(host[colon:]) {
-// 		host, port = host[:colon], host[colon+1:]
-// 	}
+func loadTemplates() error {
+	if templates != nil {
+		return nil
+	}
+	templates = make(map[string]*template.Template)
+	tmplFiles, err := fs.ReadDir(files, "ui/pages")
+	if err != nil {
+		return err
+	}
 
-// 	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-// 		host = host[1 : len(host)-1]
-// 	}
+	for _, tmpl := range tmplFiles {
+		if tmpl.IsDir() {
+			continue
+		}
+		pt := template.New(tmpl.Name())
+		pt.Funcs(funcMap)
+		pt, err = pt.ParseFS(files, "ui/pages/"+tmpl.Name(), "ui/layouts/*.go.tpl")
+		if err != nil {
+			log.Println(err)
 
-// 	return
-// }
-// func validOptionalPort(port string) bool {
-// 	if port == "" {
-// 		return true
-// 	}
-// 	if port[0] != ':' {
-// 		return false
-// 	}
-// 	for _, b := range port[1:] {
-// 		if b < '0' || b > '9' {
-// 			return false
-// 		}
-// 	}
-// 	return true
-// }
+			return err
+		}
+		templates[tmpl.Name()] = pt
+	}
+	return nil
+}

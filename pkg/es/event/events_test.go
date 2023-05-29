@@ -55,3 +55,28 @@ func TestEventEncode(t *testing.T) {
 		is.Equal(lis[i], chk[i])
 	}
 }
+
+type exampleAgg struct{ value string }
+
+func (a *exampleAgg) ApplyEvent(lis ...event.Event) {
+	for _, e := range lis {
+		switch e := e.(type) {
+		case interface{ Payload() exampleEvSetValue }:
+			a.value = e.Payload().value
+		}
+	}
+}
+
+type exampleEvSetValue struct{ value string }
+
+func TestApplyEventGeneric(t *testing.T) {
+	payload := &exampleAgg{}
+	var agg = event.AsAggregate(payload)
+
+	agg.ApplyEvent(event.NewEvents(
+		event.AsEvent(exampleEvSetValue{"hello"}),
+	)...)
+
+	is := is.New(t)
+	is.Equal(payload.value, "hello")
+}

@@ -1,9 +1,12 @@
 export PATH:=$(shell go env GOPATH)/bin:$(PATH)
 export EV_DATA=mem:
 export EV_HTTP=:8080
-#export EV_TRACE_SAMPLE=always
-#export EV_TRACE_ENDPOINT=localhost:4318
+export WEBFINGER_DOMAINS=localhost
+
+.DEFAULT_GOAL := air
+
 -include local.mk
+
 
 air: gen
 ifeq (, $(shell which air))

@@ -12,8 +12,6 @@ type SubjectSet struct {
 	event.IsEvent `json:"-"`
 }
 
-var _ event.Event = (*SubjectSet)(nil)
-
 type SubjectDeleted struct {
 	Subject string `json:"subject"`
 
@@ -29,6 +27,7 @@ type LinkSet struct {
 	HRef       string             `json:"href,omitempty"`
 	Titles     map[string]string  `json:"titles,omitempty"`
 	Properties map[string]*string `json:"properties,omitempty"`
+	Template   string             `json:"template,omitempty"`
 
 	event.IsEvent `json:"-"`
 }

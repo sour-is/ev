@@ -62,14 +62,14 @@ func TestMain(m *testing.M) {
 	}
 }
 
-func TestGetHTTP(t *testing.T) {
+func TestE2EGetHTTP(t *testing.T) {
 	is := is.New(t)
 	res, err := http.DefaultClient.Get("http://[::1]:61234/.well-known/webfinger")
 	is.NoErr(err)
 	is.Equal(res.StatusCode, http.StatusBadRequest)
 }
 
-func TestCreateResource(t *testing.T) {
+func TestE2ECreateResource(t *testing.T) {
 	is := is.New(t)
 
 	_, priv, err := ed25519.GenerateKey(nil)

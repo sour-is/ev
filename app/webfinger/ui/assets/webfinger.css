@@ -1,0 +1,95 @@
+/* Space out content a bit */
+body {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+/* Everything but the jumbotron gets side spacing for mobile first views */
+.header,
+.footer {
+  padding-right: 15px;
+  padding-left: 15px;
+}
+
+/* Custom page header */
+.header {
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e5e5;
+}
+/* Make the masthead heading the same height as the navigation */
+.header h3 {
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: 40px;
+}
+
+/* Custom page footer */
+.footer {
+  padding-top: 19px;
+  color: #777;
+  border-top: 1px solid #e5e5e5;
+}
+
+.panel-heading a { 
+  color: white;
+  font-weight: bold;
+}
+
+.container-narrow > hr {
+  margin: 30px 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  body, .panel-body {
+    color: white;
+    background-color: #222;
+  }
+  nav.navbar-default {
+    background-color: rgb(35, 29, 71);
+  }
+  .navbar-default .navbar-brand {
+     color: white;
+  }
+  .panel-primary, .list-group, .list-group-item {
+    color: white;
+    background-color: #16181c;
+  }
+  .table > tbody > tr.active > th, .table > tbody > tr.active > td {
+    background-color: rgb(35, 29, 71);
+  }
+  .table-striped > tbody > tr:nth-of-type(2n+1) {
+    background-color: rgb(35, 29, 71);
+  }
+  .panel pre {
+    color: white;
+    background-color: #16181c;
+  }
+  .panel .panel-primary > .panel-heading {
+    background-color: rgb(35, 29, 71);
+  }
+
+  .panel a {
+    color: cornflowerblue;
+  }
+
+  code {
+    color: white;
+    background-color: #282b32;
+  }
+}
+
+@import url(https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/fira_code.css);
+
+code { font-family: 'Fira Code', monospace; }
+
+@media (min-width: 100) {
+  .truncate {
+    width: 750px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .container {
+    width: 750px;
+  }
+}

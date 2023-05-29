@@ -178,6 +178,8 @@ func run(opts opts) error {
 				break
 			}
 
+			fmt.Fprintln(os.Stderr, jrd)
+
 			token, err := webfinger.NewSignedRequest(jrd, key)
 			if err != nil {
 				return err

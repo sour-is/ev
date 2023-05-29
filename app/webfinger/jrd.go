@@ -54,6 +54,7 @@ type Link struct {
 	HRef       string             `json:"href,omitempty"`
 	Titles     map[string]string  `json:"titles,omitempty"`
 	Properties map[string]*string `json:"properties,omitempty"`
+	Template   string             `json:"template,omitempty"`
 }
 
 type Links []*Link
@@ -198,6 +199,7 @@ func (a *JRD) ApplyEvent(events ...event.Event) {
 			link.Type = e.Type
 			link.Titles = e.Titles
 			link.Properties = e.Properties
+			link.Template = e.Template
 
 		case *LinkDeleted:
 			a.Links = slice.FilterFn(func(link *Link) bool { return link.Index != e.Index }, a.Links...)
@@ -249,8 +251,8 @@ func (a *JRD) OnClaims(jrd *JRD) error {
 	}
 
 	for _, z := range slice.Align(
-		jrd.Links,
-		a.Links,
+		a.Links,   // old
+		jrd.Links, // new
 		func(l, r *Link) bool { return l.Index < r.Index },
 	) {
 		// Not in new == delete
@@ -270,6 +272,7 @@ func (a *JRD) OnClaims(jrd *JRD) error {
 				HRef:       link.HRef,
 				Titles:     link.Titles,
 				Properties: link.Properties,
+				Template:   link.Template,
 			})
 			continue
 		}
@@ -336,23 +339,20 @@ func (a *JRD) OnLinkSet(o, n *Link) error {
 		HRef:       n.HRef,
 		Titles:     n.Titles,
 		Properties: n.Properties,
+		Template:   n.Template,
 	}
 
-	// if n.Index != o.Index {
-	// 	fmt.Println(342)
-	// 	modified = true
-	// }
 	if n.Rel != o.Rel {
-		fmt.Println(346)
 		modified = true
 	}
 	if n.Type != o.Type {
-		fmt.Println(350)
-
 		modified = true
 	}
 	if n.HRef != o.HRef {
-		fmt.Println(355)
+		modified = true
+	}
+	if n.Template != o.Template {
+		fmt.Println(360, n.Template, o.Template, e.Template)
 
 		modified = true
 	}
@@ -368,8 +368,6 @@ func (a *JRD) OnLinkSet(o, n *Link) error {
 		slice.Zip(oKeys, slice.FromMapValues(o.Titles, oKeys)),
 	) {
 		if z.Key != z.Value {
-			fmt.Println(365)
-
 			modified = true
 			break
 		}
@@ -389,15 +387,11 @@ func (a *JRD) OnLinkSet(o, n *Link) error {
 		curValue := z.Value
 
 		if newValue.Key != curValue.Key {
-			fmt.Println(380, newValue.Key, curValue.Key)
-
 			modified = true
 			break
 		}
 
 		if !cmpPtr(newValue.Value, curValue.Value) {
-			fmt.Println(387)
-
 			modified = true
 			break
 		}
