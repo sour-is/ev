@@ -1,7 +1,7 @@
 package webfinger
 
 import (
-	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/event"
 )
 
 type SubjectSet struct {

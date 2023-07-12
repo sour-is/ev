@@ -5,7 +5,7 @@ import (
 
 	"github.com/tj/go-semver"
 
-	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/event"
 )
 
 type Info struct {

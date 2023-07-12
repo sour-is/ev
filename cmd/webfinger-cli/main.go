@@ -16,10 +16,10 @@ import (
 	"strings"
 
 	"github.com/docopt/docopt-go"
+	"go.sour.is/pkg/xdg"
 	"gopkg.in/yaml.v3"
 
 	"go.sour.is/ev/app/webfinger"
-	"go.sour.is/ev/cmd/webfinger-cli/xdg"
 )
 
 var usage = `Webfinger CLI.

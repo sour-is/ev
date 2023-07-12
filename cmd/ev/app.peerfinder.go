@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"go.sour.is/pkg/env"
+	"go.sour.is/pkg/lg"
+	"go.sour.is/pkg/service"
+	"go.sour.is/pkg/slice"
+
 	"go.sour.is/ev"
 	"go.sour.is/ev/app/peerfinder"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/env"
-	"go.sour.is/ev/pkg/es/driver/projecter"
-	"go.sour.is/ev/pkg/service"
-	"go.sour.is/ev/pkg/slice"
+	"go.sour.is/ev/pkg/driver/projecter"
 )
 
 var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error {

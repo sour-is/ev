@@ -11,7 +11,7 @@ import (
 
 	"github.com/keys-pub/keys"
 
-	"go.sour.is/ev/internal/lg"
+	"go.sour.is/pkg/lg"
 )
 
 // Config represents a Salty Config for a User which at a minimum is required

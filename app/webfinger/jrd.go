@@ -8,10 +8,11 @@ import (
 	"hash/fnv"
 	"sort"
 
-	"go.sour.is/ev/pkg/es/event"
-	"go.sour.is/ev/pkg/set"
-	"go.sour.is/ev/pkg/slice"
+	"go.sour.is/pkg/set"
+	"go.sour.is/pkg/slice"
 	"gopkg.in/yaml.v3"
+
+	"go.sour.is/ev/pkg/event"
 )
 
 func StreamID(subject string) string {

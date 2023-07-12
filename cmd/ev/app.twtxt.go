@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/service"
+	"go.sour.is/pkg/lg"
+	"go.sour.is/pkg/service"
 )
 
 var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error {

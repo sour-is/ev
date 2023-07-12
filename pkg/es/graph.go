@@ -9,10 +9,11 @@ import (
 	"net/http"
 	"time"
 
+	"go.sour.is/pkg/gql"
+	"go.sour.is/pkg/lg"
+
 	"go.sour.is/ev"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/es/event"
-	"go.sour.is/ev/pkg/gql"
+	"go.sour.is/ev/pkg/event"
 )
 
 type EventResolver interface {

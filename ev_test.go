@@ -12,11 +12,11 @@ import (
 
 	"go.sour.is/ev"
 	"go.sour.is/ev/app/peerfinder"
-	memstore "go.sour.is/ev/pkg/es/driver/mem-store"
-	"go.sour.is/ev/pkg/es/driver/projecter"
-	resolvelinks "go.sour.is/ev/pkg/es/driver/resolve-links"
-	"go.sour.is/ev/pkg/es/driver/streamer"
-	"go.sour.is/ev/pkg/es/event"
+	memstore "go.sour.is/ev/pkg/driver/mem-store"
+	"go.sour.is/ev/pkg/driver/projecter"
+	resolvelinks "go.sour.is/ev/pkg/driver/resolve-links"
+	"go.sour.is/ev/pkg/driver/streamer"
+	"go.sour.is/ev/pkg/event"
 )
 
 var (

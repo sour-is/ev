@@ -11,10 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"go.opentelemetry.io/otel/metric/instrument"
-	"go.opentelemetry.io/otel/metric/instrument/syncint64"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/authreq"
+	"go.opentelemetry.io/otel/metric"
+	"go.sour.is/pkg/authreq"
+	"go.sour.is/pkg/lg"
 	"go.uber.org/multierr"
 )
 
@@ -30,9 +29,9 @@ func WithBlobStore(path string) *withBlobStore {
 type withBlobStore struct {
 	path string
 
-	m_get_blob    syncint64.Counter
-	m_put_blob    syncint64.Counter
-	m_delete_blob syncint64.Counter
+	m_get_blob    metric.Int64Counter
+	m_put_blob    metric.Int64Counter
+	m_delete_blob metric.Int64Counter
 }
 
 func (o *withBlobStore) ApplySalty(s *service) {}
@@ -49,18 +48,18 @@ func (o *withBlobStore) Setup(ctx context.Context) error {
 	}
 
 	m := lg.Meter(ctx)
-	o.m_get_blob, err = m.SyncInt64().Counter("salty_get_blob",
-		instrument.WithDescription("salty get blob called"),
+	o.m_get_blob, err = m.Int64Counter("salty_get_blob",
+		metric.WithDescription("salty get blob called"),
 	)
 	errs = multierr.Append(errs, err)
 
-	o.m_put_blob, err = m.SyncInt64().Counter("salty_put_blob",
-		instrument.WithDescription("salty put blob called"),
+	o.m_put_blob, err = m.Int64Counter("salty_put_blob",
+		metric.WithDescription("salty put blob called"),
 	)
 	errs = multierr.Append(errs, err)
 
-	o.m_delete_blob, err = m.SyncInt64().Counter("salty_delete_blob",
-		instrument.WithDescription("salty delete blob called"),
+	o.m_delete_blob, err = m.Int64Counter("salty_delete_blob",
+		metric.WithDescription("salty delete blob called"),
 	)
 	errs = multierr.Append(errs, err)
 

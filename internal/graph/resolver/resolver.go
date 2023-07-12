@@ -5,11 +5,12 @@ package resolver
 import (
 	"context"
 
+	"go.sour.is/pkg/gql"
+
 	"go.sour.is/ev/app/msgbus"
 	"go.sour.is/ev/app/salty"
 	"go.sour.is/ev/internal/graph/generated"
 	"go.sour.is/ev/pkg/es"
-	"go.sour.is/ev/pkg/gql"
 )
 
 type Resolver struct{}

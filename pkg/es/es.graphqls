@@ -1,5 +1,5 @@
 
-type Meta @goModel(model: "go.sour.is/ev/pkg/es/event.Meta") {
+type Meta @goModel(model: "go.sour.is/ev/pkg/event.Meta") {
     eventID: String! @goField(name: "getEventID")
     streamID: String! @goField(name: "ActualStreamID")
     position: Int! @goField(name: "ActualPosition")

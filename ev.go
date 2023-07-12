@@ -8,13 +8,13 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/multierr"
 
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/es/driver"
-	"go.sour.is/ev/pkg/es/event"
-	"go.sour.is/ev/pkg/locker"
+	"go.sour.is/ev/pkg/driver"
+	"go.sour.is/ev/pkg/event"
+	"go.sour.is/pkg/lg"
+	"go.sour.is/pkg/locker"
 )
 
 type config struct {
@@ -32,19 +32,19 @@ func Init(ctx context.Context) error {
 	m := lg.Meter(ctx)
 
 	var err, errs error
-	Mes_open, err = m.SyncInt64().Counter("es_open")
+	Mes_open, err = m.Int64Counter("es_open")
 	errs = multierr.Append(errs, err)
 
-	Mes_read, err = m.SyncInt64().Counter("es_read")
+	Mes_read, err = m.Int64Counter("es_read")
 	errs = multierr.Append(errs, err)
 
-	Mes_load, err = m.SyncInt64().Counter("es_load")
+	Mes_load, err = m.Int64Counter("es_load")
 	errs = multierr.Append(errs, err)
 
-	Mes_save, err = m.SyncInt64().Counter("es_save")
+	Mes_save, err = m.Int64Counter("es_save")
 	errs = multierr.Append(errs, err)
 
-	Mes_append, err = m.SyncInt64().Counter("es_append")
+	Mes_append, err = m.Int64Counter("es_append")
 	errs = multierr.Append(errs, err)
 
 	return errs
@@ -68,11 +68,11 @@ type EventStore struct {
 }
 
 var (
-	Mes_open   syncint64.Counter
-	Mes_read   syncint64.Counter
-	Mes_load   syncint64.Counter
-	Mes_save   syncint64.Counter
-	Mes_append syncint64.Counter
+	Mes_open   metric.Int64Counter
+	Mes_read   metric.Int64Counter
+	Mes_load   metric.Int64Counter
+	Mes_save   metric.Int64Counter
+	Mes_append metric.Int64Counter
 )
 
 func Open(ctx context.Context, dsn string, options ...Option) (*EventStore, error) {

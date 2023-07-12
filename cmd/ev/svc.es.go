@@ -3,18 +3,19 @@ package main
 import (
 	"context"
 
-	"go.sour.is/ev"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/env"
-	"go.sour.is/ev/pkg/es"
-	diskstore "go.sour.is/ev/pkg/es/driver/disk-store"
-	memstore "go.sour.is/ev/pkg/es/driver/mem-store"
-	"go.sour.is/ev/pkg/es/driver/projecter"
-	resolvelinks "go.sour.is/ev/pkg/es/driver/resolve-links"
-	"go.sour.is/ev/pkg/es/driver/streamer"
-	"go.sour.is/ev/pkg/es/event"
-	"go.sour.is/ev/pkg/service"
+	"go.sour.is/pkg/env"
+	"go.sour.is/pkg/lg"
+	"go.sour.is/pkg/service"
 	"go.uber.org/multierr"
+
+	"go.sour.is/ev"
+	diskstore "go.sour.is/ev/pkg/driver/disk-store"
+	memstore "go.sour.is/ev/pkg/driver/mem-store"
+	"go.sour.is/ev/pkg/driver/projecter"
+	resolvelinks "go.sour.is/ev/pkg/driver/resolve-links"
+	"go.sour.is/ev/pkg/driver/streamer"
+	"go.sour.is/ev/pkg/es"
+	"go.sour.is/ev/pkg/event"
 )
 
 var _ = apps.Register(10, func(ctx context.Context, svc *service.Harness) error {

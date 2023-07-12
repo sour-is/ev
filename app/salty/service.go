@@ -14,15 +14,13 @@ import (
 
 	"github.com/keys-pub/keys"
 	"go.mills.io/saltyim"
-	"go.opentelemetry.io/otel/metric/instrument"
-	"go.opentelemetry.io/otel/metric/instrument/syncint64"
-	"go.opentelemetry.io/otel/metric/unit"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/multierr"
 
 	"go.sour.is/ev"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/es/event"
-	"go.sour.is/ev/pkg/gql"
+	"go.sour.is/ev/pkg/event"
+	"go.sour.is/pkg/gql"
+	"go.sour.is/pkg/lg"
 )
 
 type DNSResolver interface {
@@ -34,13 +32,13 @@ type service struct {
 	es      *ev.EventStore
 	dns     DNSResolver
 
-	m_create_user  syncint64.Counter
-	m_get_user     syncint64.Counter
-	m_api_ping     syncint64.Counter
-	m_api_register syncint64.Counter
-	m_api_lookup   syncint64.Counter
-	m_api_send     syncint64.Counter
-	m_req_time     syncint64.Histogram
+	m_create_user  metric.Int64Counter
+	m_get_user     metric.Int64Counter
+	m_api_ping     metric.Int64Counter
+	m_api_register metric.Int64Counter
+	m_api_lookup   metric.Int64Counter
+	m_api_send     metric.Int64Counter
+	m_req_time     metric.Int64Histogram
 
 	opts []Option
 }
@@ -93,39 +91,39 @@ func New(ctx context.Context, es *ev.EventStore, opts ...Option) (*service, erro
 	}
 
 	var err, errs error
-	svc.m_create_user, err = m.SyncInt64().Counter("salty_create_user",
-		instrument.WithDescription("salty create user graphql called"),
+	svc.m_create_user, err = m.Int64Counter("salty_create_user",
+		metric.WithDescription("salty create user graphql called"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_get_user, err = m.SyncInt64().Counter("salty_get_user",
-		instrument.WithDescription("salty get user graphql called"),
+	svc.m_get_user, err = m.Int64Counter("salty_get_user",
+		metric.WithDescription("salty get user graphql called"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_api_ping, err = m.SyncInt64().Counter("salty_api_ping",
-		instrument.WithDescription("salty api ping called"),
+	svc.m_api_ping, err = m.Int64Counter("salty_api_ping",
+		metric.WithDescription("salty api ping called"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_api_register, err = m.SyncInt64().Counter("salty_api_register",
-		instrument.WithDescription("salty api register"),
+	svc.m_api_register, err = m.Int64Counter("salty_api_register",
+		metric.WithDescription("salty api register"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_api_lookup, err = m.SyncInt64().Counter("salty_api_lookup",
-		instrument.WithDescription("salty api ping lookup"),
+	svc.m_api_lookup, err = m.Int64Counter("salty_api_lookup",
+		metric.WithDescription("salty api ping lookup"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_api_send, err = m.SyncInt64().Counter("salty_api_send",
-		instrument.WithDescription("salty api ping send"),
+	svc.m_api_send, err = m.Int64Counter("salty_api_send",
+		metric.WithDescription("salty api ping send"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_req_time, err = m.SyncInt64().Histogram("salty_request_time",
-		instrument.WithDescription("histogram of requests"),
-		instrument.WithUnit(unit.Unit("ns")),
+	svc.m_req_time, err = m.Int64Histogram("salty_request_time",
+		metric.WithDescription("histogram of requests"),
+		metric.WithUnit("ns"),
 	)
 	errs = multierr.Append(errs, err)
 

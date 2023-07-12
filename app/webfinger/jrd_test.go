@@ -12,14 +12,14 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v4"
 	"github.com/matryer/is"
+	"go.sour.is/ev"
 	"go.uber.org/multierr"
 
-	"go.sour.is/ev"
 	"go.sour.is/ev/app/webfinger"
-	memstore "go.sour.is/ev/pkg/es/driver/mem-store"
-	"go.sour.is/ev/pkg/es/driver/projecter"
-	"go.sour.is/ev/pkg/es/driver/streamer"
-	"go.sour.is/ev/pkg/es/event"
+	memstore "go.sour.is/ev/pkg/driver/mem-store"
+	"go.sour.is/ev/pkg/driver/projecter"
+	"go.sour.is/ev/pkg/driver/streamer"
+	"go.sour.is/ev/pkg/event"
 )
 
 func TestParseJRD(t *testing.T) {

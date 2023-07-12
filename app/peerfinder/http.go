@@ -19,10 +19,10 @@ import (
 	"github.com/oklog/ulid/v2"
 	contentnegotiation "gitlab.com/jamietanna/content-negotiation-go"
 	"go.opentelemetry.io/otel/attribute"
+	"go.sour.is/pkg/lg"
 
 	"go.sour.is/ev"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/es/event"
+	"go.sour.is/ev/pkg/event"
 )
 
 var (
@@ -656,7 +656,6 @@ func fnOrderByPeer(rq *Request) listPeer {
 		v := peers[i]
 		sort.Sort(v.Results)
 
-		
 		v.Name = v.Results[0].Name
 		v.Country = v.Results[0].Country
 		v.Latency = v.Results[0].Latency

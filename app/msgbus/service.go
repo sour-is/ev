@@ -14,24 +14,23 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"go.opentelemetry.io/otel/metric/instrument"
-	"go.opentelemetry.io/otel/metric/instrument/syncint64"
-	"go.opentelemetry.io/otel/metric/unit"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/multierr"
 
 	"go.sour.is/ev"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/es/event"
-	"go.sour.is/ev/pkg/gql"
+	"go.sour.is/ev/pkg/event"
+
+	"go.sour.is/pkg/gql"
+	"go.sour.is/pkg/lg"
 )
 
 type service struct {
 	es *ev.EventStore
 
-	m_gql_posts            syncint64.Counter
-	m_gql_post_added       syncint64.Counter
-	m_gql_post_added_event syncint64.Counter
-	m_req_time             syncint64.Histogram
+	m_gql_posts            metric.Int64Counter
+	m_gql_post_added       metric.Int64Counter
+	m_gql_post_added_event metric.Int64Counter
+	m_req_time             metric.Int64Histogram
 }
 
 type MsgbusResolver interface {
@@ -56,24 +55,24 @@ func New(ctx context.Context, es *ev.EventStore) (*service, error) {
 	svc := &service{es: es}
 
 	var err, errs error
-	svc.m_gql_posts, err = m.SyncInt64().Counter("msgbus_posts",
-		instrument.WithDescription("msgbus graphql posts requests"),
+	svc.m_gql_posts, err = m.Int64Counter("msgbus_posts",
+		metric.WithDescription("msgbus graphql posts requests"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_gql_post_added, err = m.SyncInt64().Counter("msgbus_post_added",
-		instrument.WithDescription("msgbus graphql post added subcription requests"),
+	svc.m_gql_post_added, err = m.Int64Counter("msgbus_post_added",
+		metric.WithDescription("msgbus graphql post added subcription requests"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_gql_post_added_event, err = m.SyncInt64().Counter("msgbus_post_event",
-		instrument.WithDescription("msgbus graphql post added subscription events"),
+	svc.m_gql_post_added_event, err = m.Int64Counter("msgbus_post_event",
+		metric.WithDescription("msgbus graphql post added subscription events"),
 	)
 	errs = multierr.Append(errs, err)
 
-	svc.m_req_time, err = m.SyncInt64().Histogram("msgbus_request_time",
-		instrument.WithDescription("msgbus graphql post added subscription events"),
-		instrument.WithUnit(unit.Unit("ns")),
+	svc.m_req_time, err = m.Int64Histogram("msgbus_request_time",
+		metric.WithDescription("msgbus graphql post added subscription events"),
+		metric.WithUnit("ns"),
 	)
 	errs = multierr.Append(errs, err)
 

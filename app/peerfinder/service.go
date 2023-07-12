@@ -6,11 +6,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.sour.is/ev"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/es/event"
-	"go.sour.is/ev/pkg/locker"
+	"go.sour.is/pkg/lg"
+	"go.sour.is/pkg/locker"
 	"go.uber.org/multierr"
+
+	"go.sour.is/ev"
+	"go.sour.is/ev/pkg/event"
 )
 
 const (

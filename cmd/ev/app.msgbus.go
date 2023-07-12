@@ -6,10 +6,10 @@ import (
 
 	"go.sour.is/ev"
 	"go.sour.is/ev/app/msgbus"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/service"
-	"go.sour.is/ev/pkg/es/driver/projecter"
-	"go.sour.is/ev/pkg/slice"
+	"go.sour.is/ev/pkg/driver/projecter"
+	"go.sour.is/pkg/lg"
+	"go.sour.is/pkg/service"
+	"go.sour.is/pkg/slice"
 )
 
 var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error {

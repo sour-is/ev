@@ -11,10 +11,10 @@ import (
 
 	"go.sour.is/ev"
 	"go.sour.is/ev/app/salty"
-	"go.sour.is/ev/internal/lg"
-	"go.sour.is/ev/pkg/env"
-	"go.sour.is/ev/pkg/service"
-	"go.sour.is/ev/pkg/slice"
+	"go.sour.is/pkg/env"
+	"go.sour.is/pkg/lg"
+	"go.sour.is/pkg/service"
+	"go.sour.is/pkg/slice"
 )
 
 var _ = apps.Register(50, func(ctx context.Context, svc *service.Harness) error {
