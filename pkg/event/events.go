@@ -238,25 +238,26 @@ func AsEvent[T any](e T) Event {
 	return &asEvent[T]{payload: e}
 }
 
-type asEvent [T any] struct {
+type asEvent[T any] struct {
 	payload T
 	IsEvent
 }
+
 func (e asEvent[T]) Payload() T {
 	return e.payload
 }
 
-
-type AGG interface{ApplyEvent(...Event)}
+type AGG interface{ ApplyEvent(...Event) }
 
 func AsAggregate[T AGG](e T) Aggregate {
 	return &asAggregate[T]{payload: e}
 }
 
-type asAggregate [T AGG] struct {
+type asAggregate[T AGG] struct {
 	payload T
 	IsAggregate
 }
+
 func (e *asAggregate[T]) Payload() T {
 	return e.payload
 }

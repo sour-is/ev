@@ -14,8 +14,8 @@ import (
 	"go.sour.is/ev/pkg/driver/projecter"
 	resolvelinks "go.sour.is/ev/pkg/driver/resolve-links"
 	"go.sour.is/ev/pkg/driver/streamer"
-	"go.sour.is/ev/pkg/es"
 	"go.sour.is/ev/pkg/event"
+	gql_ev "go.sour.is/ev/pkg/gql"
 )
 
 var _ = apps.Register(10, func(ctx context.Context, svc *service.Harness) error {
@@ -48,7 +48,7 @@ var _ = apps.Register(10, func(ctx context.Context, svc *service.Harness) error 
 		span.RecordError(err)
 		return err
 	}
-	svc.Add(eventstore, &es.EventStore{EventStore: eventstore})
+	svc.Add(eventstore, &gql_ev.EventStore{EventStore: eventstore})
 
 	return nil
 })

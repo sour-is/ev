@@ -43,8 +43,8 @@ func (r *resolvelinks) EventLog(ctx context.Context, streamID string) (driver.Ev
 }
 
 type wrapper struct {
-	up           driver.EventLog
-	resolvelinks *resolvelinks
+	up       driver.EventLog
+	resolver *resolvelinks
 }
 
 func (r *wrapper) Unwrap() driver.EventLog {
@@ -60,60 +60,7 @@ func (w *wrapper) Read(ctx context.Context, after int64, count int64) (event.Eve
 		return nil, err
 	}
 
-	idx := make(map[string][]uint64)
-	ptrs := make(map[string][]int)
-	for i := range events {
-		e := events[i]
-		if e, ok := e.(*event.EventPtr); ok {
-			idx[e.StreamID] = append(idx[e.StreamID], e.Pos)
-			ptrs[e.StreamID] = append(ptrs[e.StreamID], i)
-		}
-	}
-
-	for streamID, ids := range idx {
-		d, err := w.resolvelinks.EventLog(ctx, streamID)
-		if err != nil {
-			return nil, err
-		}
-		ptr := ptrs[streamID]
-		lis, err := d.ReadN(ctx, ids...)
-		if err != nil && !errors.Is(err, ev.ErrNotFound) {
-			return nil, err
-		}
-
-		for i := range lis {
-			meta := lis[i].EventMeta()
-			actual := events[ptr[i]].EventMeta()
-			meta.ActualPosition = actual.Position
-			meta.ActualStreamID = actual.ActualStreamID
-			lis[i].SetEventMeta(meta)
-			events[i] = lis[i]
-		}
-	}
-
-	// for i, e := range events {
-	// 	switch e := e.(type) {
-	// 	case *event.EventPtr:
-	// 		d, err := w.resolvelinks.EventLog(ctx, e.StreamID)
-	// 		if err != nil {
-	// 			return nil, err
-	// 		}
-	// 		lis, err := d.ReadN(ctx, e.Pos)
-	// 		if err != nil && !errors.Is(err, es.ErrNotFound) {
-	// 			return nil, err
-	// 		}
-
-	// 		if ne := lis.First(); ne != event.NilEvent {
-	// 			meta := ne.EventMeta()
-	// 			actual := e.EventMeta()
-	// 			meta.ActualPosition = actual.Position
-	// 			meta.ActualStreamID = actual.ActualStreamID
-	// 			ne.SetEventMeta(meta)
-	// 			events[i] = ne
-	// 		}
-	// 	}
-	// }
-
+	err = w.resolvelinks(ctx, events)
 	return events, err
 }
 
@@ -126,29 +73,7 @@ func (w *wrapper) ReadN(ctx context.Context, index ...uint64) (event.Events, err
 		return nil, err
 	}
 
-	for i, e := range events {
-		switch e := e.(type) {
-		case *event.EventPtr:
-			d, err := w.resolvelinks.EventLog(ctx, e.StreamID)
-			if err != nil {
-				return nil, err
-			}
-			lis, err := d.ReadN(ctx, e.Pos)
-			if err != nil {
-				return nil, err
-			}
-
-			ne := lis.First()
-			meta := ne.EventMeta()
-			actual := e.EventMeta()
-			meta.ActualPosition = actual.Position
-			meta.ActualStreamID = actual.ActualStreamID
-			ne.SetEventMeta(meta)
-
-			events[i] = ne
-		}
-	}
-
+	err = w.resolvelinks(ctx, events)
 	return events, err
 }
 
@@ -171,4 +96,38 @@ func (w *wrapper) LastIndex(ctx context.Context) (uint64, error) {
 	defer span.End()
 
 	return w.up.LastIndex(ctx)
+}
+
+func (w *wrapper) resolvelinks(ctx context.Context, events event.Events) error {
+	idx := make(map[string][]uint64)
+	ptrs := make(map[string][]int)
+	for i := range events {
+		e := events[i]
+		if e, ok := e.(*event.EventPtr); ok {
+			idx[e.StreamID] = append(idx[e.StreamID], e.Pos)
+			ptrs[e.StreamID] = append(ptrs[e.StreamID], i)
+		}
+	}
+
+	for streamID, ids := range idx {
+		d, err := w.resolver.EventLog(ctx, streamID)
+		if err != nil {
+			return err
+		}
+		ptr := ptrs[streamID]
+		lis, err := d.ReadN(ctx, ids...)
+		if err != nil && !errors.Is(err, ev.ErrNotFound) {
+			return err
+		}
+
+		for i := range lis {
+			meta := lis[i].EventMeta()
+			actual := events[ptr[i]].EventMeta()
+			meta.ActualPosition = actual.Position
+			meta.ActualStreamID = actual.ActualStreamID
+			lis[i].SetEventMeta(meta)
+			events[i] = lis[i]
+		}
+	}
+	return nil
 }

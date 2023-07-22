@@ -10,13 +10,13 @@ import (
 	"go.sour.is/ev/app/msgbus"
 	"go.sour.is/ev/app/salty"
 	"go.sour.is/ev/internal/graph/generated"
-	"go.sour.is/ev/pkg/es"
+	gql_es "go.sour.is/ev/pkg/gql"
 )
 
 type Resolver struct {
 	msgbus.MsgbusResolver
 	salty.SaltyResolver
-	es.EventResolver
+	gql_es.EventResolver
 }
 
 // Query returns generated.QueryResolver implementation.
@@ -40,7 +40,7 @@ type noop struct{}
 
 var _ msgbus.MsgbusResolver = (*noop)(nil)
 var _ salty.SaltyResolver = (*noop)(nil)
-var _ es.EventResolver = (*noop)(nil)
+var _ gql_es.EventResolver = (*noop)(nil)
 
 func (*noop) IsResolver() {}
 func (*noop) CreateSaltyUser(ctx context.Context, nick string, pubkey string) (*salty.SaltyUser, error) {
@@ -58,7 +58,7 @@ func (*noop) PostAdded(ctx context.Context, name, tag string, after int64) (<-ch
 func (*noop) Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error) {
 	panic("not implemented")
 }
-func (*noop) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *es.GQLEvent, error) {
+func (*noop) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *gql_es.Event, error) {
 	panic("not implemented")
 }
 func (*noop) TruncateStream(ctx context.Context, streamID string, index int64) (bool, error) {

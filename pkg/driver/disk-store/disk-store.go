@@ -19,7 +19,6 @@ import (
 	"go.sour.is/pkg/cache"
 	"go.sour.is/pkg/lg"
 	"go.sour.is/pkg/locker"
-	"go.sour.is/pkg/math"
 
 	"go.sour.is/ev"
 	"go.sour.is/ev/pkg/driver"
@@ -27,6 +26,9 @@ import (
 )
 
 const CachSize = 1000
+
+const AppendOnly = ev.AppendOnly
+const AllEvents = ev.AllEvents
 
 type lockedWal = locker.Locked[wal.Log]
 type openlogs struct {
@@ -42,8 +44,7 @@ type diskStore struct {
 	m_disk_write metric.Int64Counter
 }
 
-const AppendOnly = ev.AppendOnly
-const AllEvents = ev.AllEvents
+var _ driver.Driver = (*diskStore)(nil)
 
 func Init(ctx context.Context) error {
 	ctx, span := lg.Span(ctx)
@@ -70,8 +71,6 @@ func Init(ctx context.Context) error {
 
 	return errs
 }
-
-var _ driver.Driver = (*diskStore)(nil)
 
 func (d *diskStore) Open(ctx context.Context, dsn string) (driver.Driver, error) {
 	_, span := lg.Span(ctx)
@@ -237,84 +236,6 @@ func (e *eventLog) Append(ctx context.Context, events event.Events, version uint
 
 	return count, err
 }
-func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, error) {
-	ctx, span := lg.Span(ctx)
-	defer span.End()
-	span.SetAttributes(
-		attribute.Int64("args.after", after),
-		attribute.Int64("args.count", count),
-		attribute.String("streamID", e.streamID),
-		attribute.String("path", e.diskStore.path),
-	)
-
-	var events event.Events
-
-	err := e.events.Use(ctx, func(ctx context.Context, stream *wal.Log) error {
-		ctx, span := lg.Span(ctx)
-		defer span.End()
-
-		first, err := stream.FirstIndex()
-		if err != nil {
-			span.RecordError(err)
-			return err
-		}
-		last, err := stream.LastIndex()
-		if err != nil {
-			span.RecordError(err)
-			return err
-		}
-		// ---
-		if first == 0 || last == 0 {
-			return nil
-		}
-
-		start, count := math.PagerBox(first, last, after, count)
-		if count == 0 {
-			return nil
-		}
-
-		span.SetAttributes(
-			attribute.Int64("first", int64(first)),
-			attribute.Int64("last", int64(last)),
-			attribute.Int64("start", int64(start)),
-			attribute.Int64("count", int64(count)),
-			attribute.Int64("after", int64(after)),
-		)
-
-		events = make([]event.Event, math.Abs(count))
-		for i := range events {
-
-			// ---
-			events[i], err = readStream(ctx, stream, start)
-			if err != nil {
-				span.RecordError(err)
-				return err
-			}
-			// ---
-			span.AddEvent(fmt.Sprintf("read event %d of %d - %d", i, len(events), events[i].EventMeta().ActualPosition))
-
-			if count > 0 {
-				start += 1
-			} else {
-				start -= 1
-			}
-			if start < first || start > last {
-				events = events[:i+1]
-				break
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		span.RecordError(err)
-		return nil, err
-	}
-
-	event.SetStreamID(e.streamID, events...)
-	e.diskStore.m_disk_read.Add(ctx, int64(len(events)))
-
-	return events, nil
-}
 func (e *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -340,6 +261,46 @@ func (e *eventLog) ReadN(ctx context.Context, index ...uint64) (event.Events, er
 	})
 
 	return events, err
+}
+func (e *eventLog) Read(ctx context.Context, after, count int64) (event.Events, error) {
+	ctx, span := lg.Span(ctx)
+	defer span.End()
+	span.SetAttributes(
+		attribute.Int64("args.after", after),
+		attribute.Int64("args.count", count),
+		attribute.String("streamID", e.streamID),
+		attribute.String("path", e.diskStore.path),
+	)
+
+	var events event.Events
+	err := e.events.Use(ctx, func(ctx context.Context, stream *wal.Log) error {
+		ctx, span := lg.Span(ctx)
+		defer span.End()
+
+		first, err := stream.FirstIndex()
+		if err != nil {
+			return err
+		}
+		last, err := stream.LastIndex()
+		if err != nil {
+			return err
+		}
+		streamIDs, err := driver.GenerateStreamIDs(first, last, after, count)
+		if err != nil {
+			return err
+		}
+		events, err = readStreamN(ctx, stream, streamIDs...)
+		event.SetStreamID(e.streamID, events...)
+		return err
+	})
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	e.diskStore.m_disk_read.Add(ctx, int64(len(events)))
+
+	return events, nil
 }
 func (e *eventLog) FirstIndex(ctx context.Context) (uint64, error) {
 	ctx, span := lg.Span(ctx)
@@ -399,32 +360,6 @@ func (e *eventLog) Truncate(ctx context.Context, index int64) error {
 		return events.TruncateFront(uint64(index))
 	})
 }
-func readStream(ctx context.Context, stream *wal.Log, index uint64) (event.Event, error) {
-	ctx, span := lg.Span(ctx)
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.Int64("args.index", int64(index)),
-	)
-
-	var b []byte
-	var err error
-	b, err = stream.Read(index)
-	if err != nil {
-		if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {
-			err = fmt.Errorf("%w: empty", ev.ErrNotFound)
-		}
-
-		span.RecordError(err)
-		return nil, err
-	}
-	e, err := event.UnmarshalBinary(ctx, b, index)
-	if err != nil {
-		span.RecordError(err)
-		return nil, err
-	}
-	return e, err
-}
 func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -442,6 +377,7 @@ func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.E
 	var err error
 	events := make(event.Events, len(index))
 	for i, idx := range index {
+		span.AddEvent(fmt.Sprintf("read event %d of %d - %d", i, len(events), events[i].EventMeta().ActualPosition))
 		b, err = stream.Read(idx)
 		if err != nil {
 			if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {

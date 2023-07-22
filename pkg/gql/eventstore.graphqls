@@ -17,7 +17,7 @@ extend type Subscription {
     eventAdded(streamID: String! after: Int! = -1): Event
 }
 
-type Event implements Edge @goModel(model: "go.sour.is/ev/pkg/es.GQLEvent") {
+type Event implements Edge @goModel(model: "go.sour.is/ev/pkg/gql.Event") {
     id: ID!
 
     eventID: String!

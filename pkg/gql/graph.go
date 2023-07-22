@@ -1,4 +1,4 @@
-package es
+package gql_ev
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 
 type EventResolver interface {
 	Events(ctx context.Context, streamID string, paging *gql.PageInput) (*gql.Connection, error)
-	EventAdded(ctx context.Context, streamID string, after int64) (<-chan *GQLEvent, error)
+	EventAdded(ctx context.Context, streamID string, after int64) (<-chan *Event, error)
 	TruncateStream(ctx context.Context, streamID string, index int64) (bool, error)
 }
 type contextKey struct {
@@ -45,7 +45,7 @@ func (es *EventStore) Events(ctx context.Context, streamID string, paging *gql.P
 	edges := make([]gql.Edge, 0, len(lis))
 	for i := range lis {
 		span.AddEvent(fmt.Sprint("event ", i, " of ", len(lis)))
-		edges = append(edges, &GQLEvent{lis[i]})
+		edges = append(edges, &Event{lis[i]})
 	}
 
 	var first, last uint64
@@ -68,7 +68,7 @@ func (es *EventStore) Events(ctx context.Context, streamID string, paging *gql.P
 		Edges: edges,
 	}, nil
 }
-func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *GQLEvent, error) {
+func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *Event, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
@@ -83,7 +83,7 @@ func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int6
 		return nil, err
 	}
 
-	ch := make(chan *GQLEvent)
+	ch := make(chan *Event)
 
 	go func() {
 		ctx, span := lg.Span(ctx)
@@ -110,7 +110,7 @@ func (e *EventStore) EventAdded(ctx context.Context, streamID string, after int6
 
 			for i := range events {
 				select {
-				case ch <- &GQLEvent{events[i]}:
+				case ch <- &Event{events[i]}:
 					continue
 				case <-ctx.Done():
 					return
@@ -141,32 +141,32 @@ func (e *EventStore) GetMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
-type GQLEvent struct {
+type Event struct {
 	e event.Event
 }
 
-func (e *GQLEvent) ID() string {
+func (e *Event) ID() string {
 	return fmt.Sprint(e.e.EventMeta().StreamID, "@", e.e.EventMeta().Position)
 }
-func (e *GQLEvent) EventID() string {
+func (e *Event) EventID() string {
 	return e.e.EventMeta().GetEventID()
 }
-func (e *GQLEvent) StreamID() string {
+func (e *Event) StreamID() string {
 	return e.e.EventMeta().StreamID
 }
-func (e *GQLEvent) Position() uint64 {
+func (e *Event) Position() uint64 {
 	return e.e.EventMeta().Position
 }
-func (e *GQLEvent) Type() string {
+func (e *Event) Type() string {
 	return event.TypeOf(e.e)
 }
-func (e *GQLEvent) Created() time.Time {
+func (e *Event) Created() time.Time {
 	return e.e.EventMeta().Created()
 }
-func (e *GQLEvent) Values() map[string]interface{} {
+func (e *Event) Values() map[string]interface{} {
 	return event.Values(e.e)
 }
-func (e *GQLEvent) Bytes() (string, error) {
+func (e *Event) Bytes() (string, error) {
 	switch e := e.e.(type) {
 	case encoding.BinaryMarshaler:
 		b, err := e.MarshalBinary()
@@ -179,11 +179,11 @@ func (e *GQLEvent) Bytes() (string, error) {
 		return string(b), err
 	}
 }
-func (e *GQLEvent) Meta() *event.Meta {
+func (e *Event) Meta() *event.Meta {
 	meta := e.e.EventMeta()
 	return &meta
 }
-func (e *GQLEvent) Linked(ctx context.Context) (*GQLEvent, error) {
+func (e *Event) Linked(ctx context.Context) (*Event, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
 
@@ -198,6 +198,6 @@ func (e *GQLEvent) Linked(ctx context.Context) (*GQLEvent, error) {
 	}
 
 	events, err := gql.FromContext[contextKey, *EventStore](ctx, esKey).ReadN(ctx, streamID, pos)
-	return &GQLEvent{e: events.First()}, err
+	return &Event{e: events.First()}, err
 }
-func (e *GQLEvent) IsEdge() {}
+func (e *Event) IsEdge() {}

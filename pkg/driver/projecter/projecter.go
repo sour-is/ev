@@ -21,7 +21,6 @@ func New(_ context.Context, fns ...func(event.Event) []event.Event) *projector {
 	return &projector{fns: fns}
 }
 func (p *projector) Apply(e *ev.EventStore) {
-
 	up := e.Driver
 	for up != nil {
 		if op, ok := up.(*projector); ok {

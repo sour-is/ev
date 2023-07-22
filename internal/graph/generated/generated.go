@@ -20,8 +20,8 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"go.sour.is/ev/app/msgbus"
 	"go.sour.is/ev/app/salty"
-	"go.sour.is/ev/pkg/es"
 	"go.sour.is/ev/pkg/event"
+	gql_ev "go.sour.is/ev/pkg/gql"
 	"go.sour.is/pkg/gql"
 )
 
@@ -130,7 +130,7 @@ type QueryResolver interface {
 	SaltyUser(ctx context.Context, nick string) (*salty.SaltyUser, error)
 }
 type SubscriptionResolver interface {
-	EventAdded(ctx context.Context, streamID string, after int64) (<-chan *es.GQLEvent, error)
+	EventAdded(ctx context.Context, streamID string, after int64) (<-chan *gql_ev.Event, error)
 	PostAdded(ctx context.Context, name string, tag string, after int64) (<-chan *msgbus.PostEvent, error)
 }
 
@@ -566,7 +566,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 }
 
 var sources = []*ast.Source{
-	{Name: "../../../pkg/es/es.graphqls", Input: `
+	{Name: "../../../pkg/gql/eventstore.graphqls", Input: `
 type Meta @goModel(model: "go.sour.is/ev/pkg/event.Meta") {
     eventID: String! @goField(name: "getEventID")
     streamID: String! @goField(name: "ActualStreamID")
@@ -585,7 +585,7 @@ extend type Subscription {
     eventAdded(streamID: String! after: Int! = -1): Event
 }
 
-type Event implements Edge @goModel(model: "go.sour.is/ev/pkg/es.GQLEvent") {
+type Event implements Edge @goModel(model: "go.sour.is/ev/pkg/gql.Event") {
     id: ID!
 
     eventID: String!
@@ -1027,7 +1027,7 @@ func (ec *executionContext) fieldContext_Connection_edges(ctx context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_id(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_id(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_id(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1071,7 +1071,7 @@ func (ec *executionContext) fieldContext_Event_id(ctx context.Context, field gra
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_eventID(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_eventID(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_eventID(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1115,7 +1115,7 @@ func (ec *executionContext) fieldContext_Event_eventID(ctx context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_streamID(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_streamID(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_streamID(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1159,7 +1159,7 @@ func (ec *executionContext) fieldContext_Event_streamID(ctx context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_position(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_position(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_position(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1203,7 +1203,7 @@ func (ec *executionContext) fieldContext_Event_position(ctx context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_values(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_values(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_values(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1247,7 +1247,7 @@ func (ec *executionContext) fieldContext_Event_values(ctx context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_bytes(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_bytes(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_bytes(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1291,7 +1291,7 @@ func (ec *executionContext) fieldContext_Event_bytes(ctx context.Context, field 
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_type(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_type(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_type(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1335,7 +1335,7 @@ func (ec *executionContext) fieldContext_Event_type(ctx context.Context, field g
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_created(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_created(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_created(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1379,7 +1379,7 @@ func (ec *executionContext) fieldContext_Event_created(ctx context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_meta(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_meta(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_meta(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1433,7 +1433,7 @@ func (ec *executionContext) fieldContext_Event_meta(ctx context.Context, field g
 	return fc, nil
 }
 
-func (ec *executionContext) _Event_linked(ctx context.Context, field graphql.CollectedField, obj *es.GQLEvent) (ret graphql.Marshaler) {
+func (ec *executionContext) _Event_linked(ctx context.Context, field graphql.CollectedField, obj *gql_ev.Event) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Event_linked(ctx, field)
 	if err != nil {
 		return graphql.Null
@@ -1456,9 +1456,9 @@ func (ec *executionContext) _Event_linked(ctx context.Context, field graphql.Col
 	if resTmp == nil {
 		return graphql.Null
 	}
-	res := resTmp.(*es.GQLEvent)
+	res := resTmp.(*gql_ev.Event)
 	fc.Result = res
-	return ec.marshalOEvent2ᚖgoᚗsourᚗisᚋevᚋpkgᚋesᚐGQLEvent(ctx, field.Selections, res)
+	return ec.marshalOEvent2ᚖgoᚗsourᚗisᚋevᚋpkgᚋgqlᚐEvent(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Event_linked(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2709,7 +2709,7 @@ func (ec *executionContext) _Subscription_eventAdded(ctx context.Context, field 
 	}
 	return func(ctx context.Context) graphql.Marshaler {
 		select {
-		case res, ok := <-resTmp.(<-chan *es.GQLEvent):
+		case res, ok := <-resTmp.(<-chan *gql_ev.Event):
 			if !ok {
 				return nil
 			}
@@ -2717,7 +2717,7 @@ func (ec *executionContext) _Subscription_eventAdded(ctx context.Context, field 
 				w.Write([]byte{'{'})
 				graphql.MarshalString(field.Alias).MarshalGQL(w)
 				w.Write([]byte{':'})
-				ec.marshalOEvent2ᚖgoᚗsourᚗisᚋevᚋpkgᚋesᚐGQLEvent(ctx, field.Selections, res).MarshalGQL(w)
+				ec.marshalOEvent2ᚖgoᚗsourᚗisᚋevᚋpkgᚋgqlᚐEvent(ctx, field.Selections, res).MarshalGQL(w)
 				w.Write([]byte{'}'})
 			})
 		case <-ctx.Done():
@@ -4726,7 +4726,7 @@ func (ec *executionContext) _Edge(ctx context.Context, sel ast.SelectionSet, obj
 	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
-	case *es.GQLEvent:
+	case *gql_ev.Event:
 		if obj == nil {
 			return graphql.Null
 		}
@@ -4791,7 +4791,7 @@ func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSe
 
 var eventImplementors = []string{"Event", "Edge"}
 
-func (ec *executionContext) _Event(ctx context.Context, sel ast.SelectionSet, obj *es.GQLEvent) graphql.Marshaler {
+func (ec *executionContext) _Event(ctx context.Context, sel ast.SelectionSet, obj *gql_ev.Event) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, eventImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -6284,7 +6284,7 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) marshalOEvent2ᚖgoᚗsourᚗisᚋevᚋpkgᚋesᚐGQLEvent(ctx context.Context, sel ast.SelectionSet, v *es.GQLEvent) graphql.Marshaler {
+func (ec *executionContext) marshalOEvent2ᚖgoᚗsourᚗisᚋevᚋpkgᚋgqlᚐEvent(ctx context.Context, sel ast.SelectionSet, v *gql_ev.Event) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

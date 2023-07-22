@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"go.sour.is/ev/pkg/event"
+	"go.sour.is/pkg/math"
 )
 
 type Driver interface {
@@ -37,4 +38,32 @@ type Subscription interface {
 type EventStream interface {
 	Subscribe(ctx context.Context, streamID string, start int64) (Subscription, error)
 	Send(ctx context.Context, streamID string, events event.Events) error
+}
+
+func GenerateStreamIDs(first, last uint64, after, count int64) ([]uint64, error) {
+	// ---
+	if first == 0 || last == 0 {
+		return nil, nil
+	}
+
+	start, count := math.PagerBox(first, last, after, count)
+	if count == 0 {
+		return nil, nil
+	}
+
+	streamIDs := make([]uint64, math.Abs(count))
+	for i := range streamIDs {
+		streamIDs[i] = start
+
+		if count > 0 {
+			start += 1
+		} else {
+			start -= 1
+		}
+		if start < first || start > last {
+			streamIDs = streamIDs[:i+1]
+			break
+		}
+	}
+	return streamIDs, nil
 }

@@ -60,6 +60,8 @@ func (s *streamer) EventLog(ctx context.Context, streamID string) (driver.EventL
 
 var _ driver.EventStream = (*streamer)(nil)
 
+// Subscribe sets up a subscription that tracks the last HWM. when new events arrive they are notified via Send.
+// Call Close when done to clean up allocation.
 func (s *streamer) Subscribe(ctx context.Context, streamID string, start int64) (driver.Subscription, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -81,6 +83,8 @@ func (s *streamer) Subscribe(ctx context.Context, streamID string, start int64) 
 		return nil
 	})
 }
+
+// Send will notify all Recv-ing subscribers that new events are ready.
 func (s *streamer) Send(ctx context.Context, streamID string, events event.Events) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -218,6 +222,7 @@ type subscription struct {
 	once   sync.Once
 }
 
+// Recv checks for new events. Returned chan will block until an event is ready or cancelled.
 func (s *subscription) Recv(ctx context.Context) <-chan bool {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -275,6 +280,8 @@ func (s *subscription) Recv(ctx context.Context) <-chan bool {
 
 	return done
 }
+
+// Events returns a batch of events since last call. Updates position of HWM to end of stream. Call Recv to be notified when more are ready.
 func (s *subscription) Events(ctx context.Context) (event.Events, error) {
 	ctx, span := lg.Span(ctx)
 	defer span.End()
@@ -303,6 +310,8 @@ func (s *subscription) Events(ctx context.Context) (event.Events, error) {
 		return err
 	})
 }
+
+// Close unsubscribes from a stream
 func (s *subscription) Close(ctx context.Context) error {
 	ctx, span := lg.Span(ctx)
 	defer span.End()

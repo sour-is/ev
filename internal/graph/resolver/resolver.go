@@ -10,7 +10,7 @@ import (
 	"go.sour.is/ev/app/msgbus"
 	"go.sour.is/ev/app/salty"
 	"go.sour.is/ev/internal/graph/generated"
-	"go.sour.is/ev/pkg/es"
+	gql_es "go.sour.is/ev/pkg/gql"
 )
 
 type Resolver struct{}
@@ -41,7 +41,7 @@ func (r *queryResolver) SaltyUser(ctx context.Context, nick string) (*salty.Salt
 }
 
 // // foo
-func (r *subscriptionResolver) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *es.GQLEvent, error) {
+func (r *subscriptionResolver) EventAdded(ctx context.Context, streamID string, after int64) (<-chan *gql_es.Event, error) {
 	panic("not implemented")
 }
 

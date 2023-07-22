@@ -134,5 +134,4 @@ func TestProjecter(t *testing.T) {
 	<-wait
 
 	is.Equal(len(events), 4)
-
 }
