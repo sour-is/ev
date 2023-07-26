@@ -377,7 +377,6 @@ func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.E
 	var err error
 	events := make(event.Events, len(index))
 	for i, idx := range index {
-		span.AddEvent(fmt.Sprintf("read event %d of %d - %d", i, len(events), events[i].EventMeta().ActualPosition))
 		b, err = stream.Read(idx)
 		if err != nil {
 			if errors.Is(err, wal.ErrNotFound) || errors.Is(err, wal.ErrOutOfRange) {
@@ -392,6 +391,7 @@ func readStreamN(ctx context.Context, stream *wal.Log, index ...uint64) (event.E
 			span.RecordError(err)
 			return nil, err
 		}
+		span.AddEvent(fmt.Sprintf("read event %d of %d - %d", i, len(events), events[i].EventMeta().ActualPosition))
 	}
 	return events, err
 }

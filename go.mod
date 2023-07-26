@@ -25,7 +25,7 @@ require github.com/tj/go-semver v1.0.0
 
 require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	go.sour.is/pkg v0.0.1
+	go.sour.is/pkg v0.0.2-0.20230726225143-5ad7fce0ac22
 )
 
 require (
