@@ -1,4 +1,5 @@
 # extend type Query{
+#     namespaces: [String!]!
 #     keys(namespace: String!) [String!]!
 #     get(namespace: String! keys: [String!]) [String]!
 # }
