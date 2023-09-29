@@ -11,12 +11,11 @@ import (
 	"go.uber.org/multierr"
 
 	"go.sour.is/ev"
-	"go.sour.is/ev/app/peerfinder"
-	memstore "go.sour.is/ev/pkg/driver/mem-store"
-	"go.sour.is/ev/pkg/driver/projecter"
-	resolvelinks "go.sour.is/ev/pkg/driver/resolve-links"
-	"go.sour.is/ev/pkg/driver/streamer"
-	"go.sour.is/ev/pkg/event"
+	memstore "go.sour.is/ev/driver/mem-store"
+	"go.sour.is/ev/driver/projecter"
+	resolvelinks "go.sour.is/ev/driver/resolve-links"
+	"go.sour.is/ev/driver/streamer"
+	"go.sour.is/ev/event"
 )
 
 var (
@@ -176,7 +175,6 @@ func TestUnwrapProjector(t *testing.T) {
 		projecter.New(
 			ctx,
 			projecter.DefaultProjection,
-			peerfinder.Projector,
 		),
 	)
 	is.NoErr(err)

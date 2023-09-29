@@ -1,1 +1,0 @@
-../ev/app.webfinger.go

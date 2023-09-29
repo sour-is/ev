@@ -9,12 +9,12 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.uber.org/multierr"
-
-	"go.sour.is/ev/pkg/driver"
-	"go.sour.is/ev/pkg/event"
 	"go.sour.is/pkg/lg"
 	"go.sour.is/pkg/locker"
+	"go.uber.org/multierr"
+
+	"go.sour.is/ev/driver"
+	"go.sour.is/ev/event"
 )
 
 type config struct {
