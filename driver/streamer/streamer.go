@@ -22,7 +22,7 @@ type state struct {
 }
 
 type streamer struct {
-	state *locker.Locked[state]
+	state *locker.Locked[*state]
 	up    driver.Driver
 }
 
@@ -216,7 +216,7 @@ type position struct {
 type subscription struct {
 	topic string
 
-	position *locker.Locked[position]
+	position *locker.Locked[*position]
 
 	events driver.EventLog
 	unsub  func(context.Context) error

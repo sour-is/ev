@@ -18,10 +18,10 @@ const AppendOnly = ev.AppendOnly
 const AllEvents = ev.AllEvents
 
 type state struct {
-	streams map[string]*locker.Locked[event.Events]
+	streams map[string]*locker.Locked[*event.Events]
 }
 type memstore struct {
-	state *locker.Locked[state]
+	state *locker.Locked[*state]
 }
 
 var _ driver.Driver = (*memstore)(nil)
@@ -37,7 +37,7 @@ func (memstore) Open(ctx context.Context, name string) (driver.Driver, error) {
 	_, span := lg.Span(ctx)
 	defer span.End()
 
-	s := &state{streams: make(map[string]*locker.Locked[event.Events])}
+	s := &state{streams: make(map[string]*locker.Locked[*event.Events])}
 	return &memstore{locker.New(s)}, nil
 }
 func (m *memstore) EventLog(ctx context.Context, streamID string) (driver.EventLog, error) {
@@ -66,7 +66,7 @@ func (m *memstore) EventLog(ctx context.Context, streamID string) (driver.EventL
 
 type eventLog struct {
 	streamID string
-	events   *locker.Locked[event.Events]
+	events   *locker.Locked[*event.Events]
 }
 
 var _ driver.EventLog = (*eventLog)(nil)

@@ -30,13 +30,13 @@ const CachSize = 1000
 const AppendOnly = ev.AppendOnly
 const AllEvents = ev.AllEvents
 
-type lockedWal = locker.Locked[wal.Log]
+type lockedWal = locker.Locked[*wal.Log]
 type openlogs struct {
 	logs *cache.Cache[string, *lockedWal]
 }
 type diskStore struct {
 	path     string
-	openlogs *locker.Locked[openlogs]
+	openlogs *locker.Locked[*openlogs]
 
 	m_disk_open  metric.Int64Counter
 	m_disk_evict metric.Int64Counter
@@ -173,7 +173,7 @@ func (d *diskStore) EventLog(ctx context.Context, streamID string) (driver.Event
 
 type eventLog struct {
 	streamID  string
-	events    *locker.Locked[wal.Log]
+	events    *locker.Locked[*wal.Log]
 	diskStore *diskStore
 }
 
