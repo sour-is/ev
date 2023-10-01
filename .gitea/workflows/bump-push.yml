@@ -1,0 +1,25 @@
+name: Go Bump
+
+on: 
+  push:
+    branches: [ "main" ]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+    
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.21.1
+
+    - run: go install github.com/psanetra/git-semver/cli@master
+
+    - run: git tag v$(cli next --stable=false) && git push --tags || echo no change
+
+    - run: echo "🍏 This job's status is ${{ job.status }}."
