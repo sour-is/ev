@@ -12,9 +12,7 @@ jobs:
       with:
         fetch-depth: 0
         fetch-tags: true
-    
-    - run: git config --unset-all http.https://github.com/.extraheader
-    
+        
     - name: Deploy to external repository
       uses: actions/github-action-push-to-another-repository@main
       env:
