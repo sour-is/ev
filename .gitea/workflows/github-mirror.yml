@@ -16,16 +16,16 @@ jobs:
     - run: git config --unset-all http.https://github.com/.extraheader
     
     - name: Deploy to external repository
-        uses: actions/github-action-push-to-another-repository@main
-        env:
-          API_TOKEN_GITHUB: ${{ secrets.GH_TOKEN }}
-        with:
-          # GitHub Action output files
-          source-directory: public/
-          destination-github-username: sour-is
-          destination-repository-name: ev
-          user-email: jon@xuu.cc
-          # It defaults to `main`
-          target-branch: "main"
+      uses: actions/github-action-push-to-another-repository@main
+      env:
+        API_TOKEN_GITHUB: ${{ secrets.GH_TOKEN }}
+      with:
+        # GitHub Action output files
+        source-directory: public/
+        destination-github-username: sour-is
+        destination-repository-name: ev
+        user-email: jon@xuu.cc
+        # It defaults to `main`
+        target-branch: "main"
 
     - run: echo "🍏 This job's status is ${{ job.status }}."
