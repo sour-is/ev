@@ -19,7 +19,7 @@ jobs:
         API_TOKEN_GITHUB: ${{ secrets.GH_TOKEN }}
       with:
         # GitHub Action output files
-        source-directory: public/
+        source-directory: .
         destination-github-username: sour-is
         destination-repository-name: ev
         user-email: jon@xuu.cc
